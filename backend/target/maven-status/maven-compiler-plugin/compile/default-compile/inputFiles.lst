@@ -1,0 +1,10 @@
+/home/vedant/vaani/backend/src/main/java/com/vaani/config/DatabaseSeeder.java
+/home/vedant/vaani/backend/src/main/java/com/vaani/VaaniApplication.java
+/home/vedant/vaani/backend/src/main/java/com/vaani/controller/RecordingController.java
+/home/vedant/vaani/backend/src/main/java/com/vaani/config/WebConfig.java
+/home/vedant/vaani/backend/src/main/java/com/vaani/service/RecordingService.java
+/home/vedant/vaani/backend/src/main/java/com/vaani/dto/RecordingResponseDto.java
+/home/vedant/vaani/backend/src/main/java/com/vaani/service/WhisperService.java
+/home/vedant/vaani/backend/src/main/java/com/vaani/service/AIService.java
+/home/vedant/vaani/backend/src/main/java/com/vaani/repository/RecordingRepository.java
+/home/vedant/vaani/backend/src/main/java/com/vaani/model/Recording.java

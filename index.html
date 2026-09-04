@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Vaani — AI Voice to Text &amp; Summarizer</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand"><img src="vaani.png" width="150" height="100" alt="Vaani"></div>
+      <nav>
+        <button class="active" data-page="dashboard">Dashboard</button>
+        <button data-page="new">New Lecture</button>
+        <button data-page="recordings">My Recordings</button>
+        <button data-page="settings">Settings</button>
+      </nav>
+      <button class="logout" id="logout">Logout</button>
+    </aside>
+
+    <main>
+      <header>
+        <span class="mobile-brand"><b>Vaani</b></span>
+        <button class="primary" data-page="new">+ New Lecture</button>
+        <span class="profile">Vedant</span>
+      </header>
+
+      <!-- DASHBOARD -->
+      <section id="dashboard" class="page active">
+        <p class="eyebrow">Welcome back, Vedant!</p>
+        <h1>Dashboard</h1>
+        <p class="muted">Here's your voice recorded notes.</p>
+        <div class="stats">
+          <div><b id="statSummaries">0</b><small>Summaries Generated</small></div>
+          <div><b id="statAudio">0.0 hrs</b><small>Audio Processed</small></div>
+        </div>
+        <div class="card">
+          <div class="cardhead">
+            <h2>Recent Lectures</h2>
+            <button class="outline" data-page="recordings">View All</button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Lecture</th>
+                <th>Professor</th>
+                <th>Duration</th>
+                <th>Created At</th>
+                <th>Status</th>
+                <th>Audio</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- NEW TRANSCRIPTION -->
+      <section id="new" class="page">
+        <div class="crumb">Dashboard &rsaquo; New Transcription</div>
+        <h1>New Transcription</h1>
+        <p class="muted">Record your voice or upload audio to generate AI transcripts and summaries.</p>
+
+        <div class="card" style="max-width:760px; padding: 20px 24px; margin-bottom: 0; border-radius: 13px 13px 0 0; border-bottom: none;">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+            <label class="meta-label">
+              Lecture Name
+              <input id="lectureNameInput" type="text" placeholder="e.g. Introduction to AI" class="meta-input">
+            </label>
+            <label class="meta-label">
+              Professor Name
+              <input id="professorNameInput" type="text" placeholder="e.g. Dr. Sharma" class="meta-input">
+            </label>
+          </div>
+        </div>
+
+        <div class="card recorder" style="border-radius: 0 0 13px 13px; margin-top: 0;">
+          <div class="tabs">
+            <button class="tab active" id="recordTab">Record Audio</button>
+            <button class="tab" id="uploadTab">Upload Audio</button>
+          </div>
+          <div id="recordPane" class="recordpane">
+            <button id="mic" class="mic" title="Start Recording">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="36" height="36">
+                <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
+                <path d="M19 11a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/>
+              </svg>
+            </button>
+            <h3 id="recordMsg">Click the microphone to start recording</h3>
+            <div id="timer">00:00:00</div>
+            <p><span id="status">Recording not started</span></p>
+            <div class="actions">
+              <button class="outline" id="reset">Reset</button>
+              <button class="primary disabled" disabled id="stop">Stop Recording</button>
+            </div>
+          </div>
+
+          <div id="uploadPane" class="upload hidden">
+            <label>
+              <b>Choose an audio file</b>
+              <small>MP3, WAV, WEBM or M4A &bull; Max 200 MB</small>
+              <input id="audio" type="file" accept="audio/*">
+            </label>
+            <p id="file"></p>
+            <div style="margin-top: 15px; text-align: left;">
+              <label style="font-weight: 700; font-size: 13px; color: var(--p); display: block; margin-bottom: 6px;">
+                Optional Transcript Notes (leave empty for AI auto-transcription):
+              </label>
+              <textarea id="uploadTranscript" placeholder="Paste or type transcript notes here, or leave empty for AI auto-transcription." style="width: 100%; height: 75px; border: 1px solid var(--border); border-radius: 7px; padding: 10px; font-family: inherit; font-size: 13px; resize: vertical;"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <button class="primary" id="process" style="margin-top:18px;">Transcribe &amp; Summarize</button>
+      </section>
+
+      <!-- DETAIL VIEW -->
+      <section id="detail" class="page">
+        <div class="crumb">Dashboard &rsaquo; Transcription Details</div>
+        <div class="detailhead">
+          <div>
+            <h1 id="detailTitle">Lecture - AI and ML Basics</h1>
+            <p class="muted" id="detailMeta">Processed by Vaani AI</p>
+          </div>
+          <button class="primary" id="download">Download Audio</button>
+        </div>
+
+        <div class="card" style="margin: 18px 0 10px; padding: 16px 20px; display: flex; align-items: center; gap: 15px;">
+          <span style="font-weight: 700; color: var(--p); white-space: nowrap; font-size: 14px;">Audio Playback:</span>
+          <audio id="detailAudioPlayer" controls style="width: 100%; height: 40px; outline: none;"></audio>
+        </div>
+
+        <div class="tabs detailtabs">
+          <button class="tab active" data-detail="transcript">Transcript</button>
+          <button class="tab" data-detail="summary">Summary</button>
+          <button class="tab" data-detail="details">Details</button>
+        </div>
+
+        <div id="transcript" class="card detailview">
+          <h2>Transcript</h2>
+          <div id="transcriptText"></div>
+        </div>
+
+        <div id="summary" class="summary hidden">
+          <div class="card">
+            <h2>AI Summary</h2>
+            <div id="summaryText" style="white-space: pre-wrap; font-family: inherit; line-height: 1.6;"></div>
+          </div>
+          <div class="card">
+            <h2>Quick Actions</h2>
+            <p class="muted">Copy transcript or summary for notes.</p>
+            <button class="primary" id="copy" style="margin-top: 15px;">Copy Summary</button>
+          </div>
+        </div>
+
+        <div id="details" class="card hidden detailview">
+          <h2>File Details</h2>
+          <p>Duration <b id="detailDuration">00:00</b></p>
+          <p>Lecture <b id="detailLecture">-</b></p>
+          <p>Professor <b id="detailProfessor">-</b></p>
+          <p>Created <b id="detailCreated">Just now</b></p>
+          <p>Status <b class="badge" id="detailStatus">Completed</b></p>
+        </div>
+      </section>
+
+      <!-- MY RECORDINGS -->
+      <section id="recordings" class="page">
+        <h1>My Recordings</h1>
+        <p class="muted">All your voice recordings, Lectures, and AI summaries.</p>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Lecture</th>
+                <th>Professor</th>
+                <th>Duration</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Audio</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="allrows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- SUMMARIES -->
+      <section id="summaries" class="page empty">
+        <h1>AI Summaries</h1>
+        <p>All your generated summaries will appear here.</p>
+        <button class="primary" data-page="dashboard">Back to Dashboard</button>
+      </section>
+
+      <!-- SETTINGS -->
+      <section id="settings" class="page">
+        <div class="card settings">
+          <h1>Settings</h1>
+          <label>Display Name<input value="Vedant"></label>
+          <label>Default Summary Length
+            <select>
+              <option>Medium</option>
+              <option>Short</option>
+              <option>Detailed</option>
+            </select>
+          </label>
+          <button class="primary" id="save">Save Changes</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast"></div>
+  <script src="js/app.js"></script>
+</body>
+</html>

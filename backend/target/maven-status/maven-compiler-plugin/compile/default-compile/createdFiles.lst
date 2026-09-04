@@ -1,0 +1,11 @@
+com/vaani/dto/RecordingResponseDto.class
+com/vaani/VaaniApplication.class
+com/vaani/service/RecordingService.class
+com/vaani/service/AIService.class
+com/vaani/service/WhisperService.class
+com/vaani/config/DatabaseSeeder.class
+com/vaani/service/AIService$SentenceScore.class
+com/vaani/controller/RecordingController.class
+com/vaani/model/Recording.class
+com/vaani/config/WebConfig.class
+com/vaani/repository/RecordingRepository.class
