@@ -14,6 +14,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -124,12 +125,16 @@ public class WhisperService {
 
     private String runWhisperScript(String audioFilePath) {
         try {
-            String pythonPath = "/home/vedant/venv/bin/python";
-            if (!new File(pythonPath).exists()) {
+            String pythonPath = System.getenv("VAANI_PYTHON_PATH");
+            if (pythonPath == null || pythonPath.isBlank()) {
                 pythonPath = "python3";
             }
 
-            String scriptPath = "/home/vedant/vaani/backend/transcribe_whisper.py";
+            String scriptPath = resolveWhisperScriptPath();
+            if (scriptPath == null) {
+                logger.warn("Whisper script not found. Skipping local transcription.");
+                return "";
+            }
 
             ProcessBuilder pb = new ProcessBuilder(pythonPath, scriptPath, audioFilePath);
             pb.redirectErrorStream(true);
@@ -155,5 +160,26 @@ public class WhisperService {
             logger.error("Failed to run Whisper script:", e);
             return "";
         }
+    }
+
+    private String resolveWhisperScriptPath() {
+        String configuredPath = System.getenv("VAANI_WHISPER_SCRIPT");
+        if (configuredPath != null && !configuredPath.isBlank() && new File(configuredPath).exists()) {
+            return configuredPath;
+        }
+
+        String[] candidates = {
+                "./transcribe_whisper.py",
+                "../backend/transcribe_whisper.py",
+                "backend/transcribe_whisper.py"
+        };
+
+        for (String candidate : candidates) {
+            Path path = Paths.get(candidate).toAbsolutePath().normalize();
+            if (Files.exists(path)) {
+                return path.toString();
+            }
+        }
+        return null;
     }
 }

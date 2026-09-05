@@ -1,8 +1,41 @@
 const API_BASE = '/api/recordings';
+const LOCAL_STORAGE_KEY = 'vaani_recordings_v1';
+let backendAvailable = true;
+let fallbackToastShown = false;
 
 let recordings = [];
 let currentRecording = null;
 let recordedBlob = null;
+
+function loadLocalRecordings() {
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
+    const data = raw ? JSON.parse(raw) : [];
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveLocalRecordings(data) {
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+}
+
+function showFallbackToast() {
+  if (!fallbackToastShown) {
+    fallbackToastShown = true;
+    toast('Backend unavailable. Running in local browser mode.');
+  }
+}
+
+async function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error || new Error('File read failed'));
+    reader.readAsDataURL(file);
+  });
+}
 
 // ── Toast ──────────────────────────────────────────────────
 const toast = m => {
@@ -37,11 +70,14 @@ async function loadRecordings() {
   try {
     const res = await fetch(API_BASE);
     if (!res.ok) throw new Error('Failed to fetch');
+    backendAvailable = true;
     recordings = await res.json();
     renderRecordings();
   } catch (err) {
-    console.error('Error loading recordings:', err);
-    toast('Could not connect to backend. Is Spring Boot running?');
+    backendAvailable = false;
+    recordings = loadLocalRecordings();
+    renderRecordings();
+    showFallbackToast();
   }
 }
 
@@ -51,6 +87,7 @@ function escapeHtml(str) {
 }
 
 function rowHtml(x) {
+  const audioSrc = x.audioDataUrl ? x.audioDataUrl : `${API_BASE}/${x.id}/audio`;
   return `
     <tr>
       <td><b>${escapeHtml(x.title)}</b></td>
@@ -61,7 +98,7 @@ function rowHtml(x) {
       <td><span class="badge">${escapeHtml(x.status || 'Completed')}</span></td>
       <td>
         ${x.hasAudio
-          ? `<audio controls src="${API_BASE}/${x.id}/audio" preload="metadata" style="height:32px;width:190px;outline:none;"></audio>`
+          ? `<audio controls src="${audioSrc}" preload="metadata" style="height:32px;width:190px;outline:none;"></audio>`
           : '<small class="muted">No Audio</small>'}
       </td>
       <td style="white-space:nowrap;">
@@ -89,7 +126,7 @@ function renderRecordings() {
 // ── Detail view ────────────────────────────────────────────
 async function openDetail(id) {
   let rec = recordings.find(r => String(r.id) === String(id));
-  if (!rec) {
+  if (!rec && backendAvailable) {
     try {
       const res = await fetch(`${API_BASE}/${id}`);
       if (res.ok) rec = await res.json();
@@ -122,7 +159,7 @@ async function openDetail(id) {
 
   const audioPlayer = document.querySelector('#detailAudioPlayer');
   if (rec.hasAudio) {
-    audioPlayer.src = `${API_BASE}/${rec.id}/audio`;
+    audioPlayer.src = rec.audioDataUrl ? rec.audioDataUrl : `${API_BASE}/${rec.id}/audio`;
     audioPlayer.style.display = 'block';
   } else {
     audioPlayer.src = '';
@@ -141,6 +178,13 @@ async function openDetail(id) {
 // ── Delete ─────────────────────────────────────────────────
 async function deleteRecording(id) {
   if (!confirm('Are you sure you want to delete this recording?')) return;
+  if (!backendAvailable) {
+    recordings = recordings.filter(r => String(r.id) !== String(id));
+    saveLocalRecordings(recordings);
+    renderRecordings();
+    toast('Recording deleted.');
+    return;
+  }
   try {
     const res = await fetch(`${API_BASE}/${id}`, { method: 'DELETE' });
     if (res.ok) { toast('Recording deleted.'); loadRecordings(); }
@@ -333,24 +377,56 @@ document.querySelector('#process').onclick = async () => {
   formData.append('transcript', transcriptText);
 
   try {
-    const res = await fetch(API_BASE, { method: 'POST', body: formData });
-    if (!res.ok) throw new Error('Failed to save recording');
-    const savedRec = await res.json();
+    if (backendAvailable) {
+      const res = await fetch(API_BASE, { method: 'POST', body: formData });
+      if (!res.ok) throw new Error('Failed to save recording');
+      const savedRec = await res.json();
 
-    await loadRecordings();
-    openDetail(savedRec.id);
+      await loadRecordings();
+      openDetail(savedRec.id);
 
-    // If backend is still processing, poll until done
-    if (savedRec.status === 'Processing') {
-      toast('Audio saved! Transcription running in background…');
-      stopPolling();
-      pollingInterval = setInterval(() => pollRecordingStatus(savedRec.id), 3000);
-    } else {
-      toast('Transcribed & Summarized successfully!');
+      // If backend is still processing, poll until done
+      if (savedRec.status === 'Processing') {
+        toast('Audio saved! Transcription running in background…');
+        stopPolling();
+        pollingInterval = setInterval(() => pollRecordingStatus(savedRec.id), 3000);
+      } else {
+        toast('Transcribed & Summarized successfully!');
+      }
+      return;
     }
+    throw new Error('Backend unavailable');
   } catch (err) {
-    console.error('Save error:', err);
-    toast('Failed to process transcription. Check backend connection.');
+    backendAvailable = false;
+    const localId = Date.now();
+    const transcript = transcriptText || 'Local mode: transcript is not auto-generated without backend AI services.';
+    const summary = transcriptText
+      ? 'Local mode summary: transcript notes were saved successfully.'
+      : 'Local mode summary: recording saved in browser storage.';
+    let audioDataUrl = null;
+    if (fileToSend) {
+      try { audioDataUrl = await fileToDataUrl(fileToSend); } catch (e) {}
+    }
+
+    const localRec = {
+      id: localId,
+      title,
+      lectureName: lectureName || '',
+      professorName: professorName || '',
+      duration: duration || '00:00',
+      createdAt: new Date().toLocaleString(),
+      status: 'Completed',
+      transcript,
+      summary,
+      hasAudio: Boolean(audioDataUrl),
+      audioDataUrl,
+    };
+    recordings = [localRec, ...loadLocalRecordings()];
+    saveLocalRecordings(recordings);
+    renderRecordings();
+    openDetail(localId);
+    showFallbackToast();
+    toast('Saved locally in browser storage.');
   }
 };
 
@@ -373,7 +449,7 @@ document.querySelector('#copy').onclick = () => {
 document.querySelector('#download').onclick = () => {
   if (currentRecording && currentRecording.hasAudio) {
     const a = document.createElement('a');
-    a.href = `${API_BASE}/${currentRecording.id}/audio`;
+    a.href = currentRecording.audioDataUrl ? currentRecording.audioDataUrl : `${API_BASE}/${currentRecording.id}/audio`;
     a.download = `${currentRecording.title}.webm`;
     document.body.appendChild(a);
     a.click();
