@@ -136,16 +136,30 @@ public class WhisperService {
                 return "";
             }
 
+            logger.info("Running Whisper script: {} {} {}", pythonPath, scriptPath, audioFilePath);
+
             ProcessBuilder pb = new ProcessBuilder(pythonPath, scriptPath, audioFilePath);
-            pb.redirectErrorStream(true);
+            // Do NOT merge stderr into stdout — stderr contains Whisper warnings/progress
+            // that would contaminate the transcript
+            pb.redirectErrorStream(false);
 
             Process process = pb.start();
 
+            // Read stdout (the actual transcript)
             StringBuilder output = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     output.append(line).append("\n");
+                }
+            }
+
+            // Read stderr separately and log it (warnings, model downloads, etc.)
+            StringBuilder errors = new StringBuilder();
+            try (BufferedReader errReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
+                String line;
+                while ((line = errReader.readLine()) != null) {
+                    errors.append(line).append("\n");
                 }
             }
 
@@ -155,7 +169,13 @@ public class WhisperService {
                 logger.warn("Whisper process timed out after 120s.");
             }
 
-            return output.toString().trim();
+            if (errors.length() > 0) {
+                logger.warn("Whisper stderr output: {}", errors.toString().trim());
+            }
+
+            String transcript = output.toString().trim();
+            logger.info("Whisper script returned {} characters of transcript", transcript.length());
+            return transcript;
         } catch (Exception e) {
             logger.error("Failed to run Whisper script:", e);
             return "";

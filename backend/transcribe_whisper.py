@@ -20,8 +20,7 @@ def transcribe_audio(audio_path):
             language="en",     # skip language detection step
         )
         text = " ".join([segment.text for segment in segments]).strip()
-        if text:
-            return text
+        return text
     except Exception as e:
         sys.stderr.write(f"Faster-Whisper error: {e}\n")
 

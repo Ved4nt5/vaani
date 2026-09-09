@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Vaani — Login</title>
+  <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <img src="vaani.png" width="140" height="90" alt="Vaani">
+        <p class="auth-tagline">AI Voice to Text & Summarizer</p>
+      </div>
+
+      <!-- LOGIN FORM -->
+      <form id="loginForm" class="auth-form active">
+        <h2>Welcome Back</h2>
+        <p class="auth-subtitle">Enter your credentials to continue</p>
+
+        <label class="auth-label">
+          Email
+          <input type="email" id="loginEmail" placeholder="you@gmail.com" required>
+        </label>
+
+        <label class="auth-label">
+          Password
+          <input type="password" id="loginPassword" placeholder="Enter your password" required>
+        </label>
+
+        <button type="submit" class="auth-btn" id="loginBtn">Login</button>
+
+        <p class="auth-switch">
+          Don't have an account? <a href="#" id="showSignup">Sign Up</a>
+        </p>
+      </form>
+
+      <!-- SIGNUP FORM -->
+      <form id="signupForm" class="auth-form">
+        <h2>Create Account</h2>
+        <p class="auth-subtitle">Sign up to start using Vaani</p>
+
+        <label class="auth-label">
+          Full Name
+          <input type="text" id="signupName" placeholder="Your name" required>
+        </label>
+
+        <label class="auth-label">
+          Email
+          <input type="email" id="signupEmail" placeholder="you@gmail.com" required>
+        </label>
+
+        <label class="auth-label">
+          Password
+          <input type="password" id="signupPassword" placeholder="Create a password" required minlength="6">
+        </label>
+
+        <button type="submit" class="auth-btn" id="signupBtn">Sign Up</button>
+
+        <p class="auth-switch">
+          Already have an account? <a href="#" id="showLogin">Login</a>
+        </p>
+      </form>
+
+      <!-- OTP VERIFICATION -->
+      <div id="otpSection" class="auth-form">
+        <h2>Verify Your Email</h2>
+        <p class="auth-subtitle">We sent a 6-digit code to <b id="otpEmailDisplay"></b></p>
+
+        <label class="auth-label">
+          Verification Code
+          <input type="text" id="otpCode" placeholder="Enter 6-digit code" maxlength="6" pattern="[0-9]{6}" required>
+        </label>
+
+        <button type="button" class="auth-btn" id="verifyOtpBtn">Verify & Continue</button>
+
+        <p class="auth-switch">
+          Didn't receive the code? <a href="#" id="resendOtp">Resend</a>
+        </p>
+      </div>
+
+      <div id="authError" class="auth-error"></div>
+      <div id="authSuccess" class="auth-success"></div>
+    </div>
+  </div>
+
+  <script src="js/auth.js"></script>
+</body>
+</html>

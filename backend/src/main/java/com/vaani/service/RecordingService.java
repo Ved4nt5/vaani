@@ -108,10 +108,10 @@ public class RecordingService {
                 java.nio.file.Files.write(tempFile, audioBytes);
 
                 // 1. Transcription via Whisper
-                String whisperTranscript = whisperService.transcribeFromPath(tempFile.toAbsolutePath().toString());
-                if (whisperTranscript == null || whisperTranscript.isBlank()) {
-                    whisperTranscript = aiService.generateTranscript(null, originalFilename);
-                }
+                String rawTranscript = whisperService.transcribeFromPath(tempFile.toAbsolutePath().toString());
+                final String whisperTranscript = (rawTranscript != null && !rawTranscript.isBlank())
+                        ? rawTranscript
+                        : aiService.generateTranscript(null, originalFilename);
 
                 // 2. Summarization
                 String generatedSummary = aiService.generateSummary(whisperTranscript, "Medium");

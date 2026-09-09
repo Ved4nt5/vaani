@@ -33,14 +33,14 @@ public class RecordingController {
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<RecordingResponseDto> getRecordingById(@PathVariable Long id) {
+    public ResponseEntity<RecordingResponseDto> getRecordingById(@PathVariable("id") Long id) {
         Optional<RecordingResponseDto> dto = recordingService.getRecordingDtoById(id);
         return dto.map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @GetMapping("/{id}/audio")
-    public ResponseEntity<byte[]> getRecordingAudio(@PathVariable Long id) {
+    public ResponseEntity<byte[]> getRecordingAudio(@PathVariable("id") Long id) {
         Optional<Recording> optionalRecording = recordingService.getRecordingEntityById(id);
         if (optionalRecording.isEmpty()) {
             return ResponseEntity.notFound().build();
@@ -84,7 +84,7 @@ public class RecordingController {
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteRecording(@PathVariable Long id) {
+    public ResponseEntity<Void> deleteRecording(@PathVariable("id") Long id) {
         if (recordingService.deleteRecording(id)) {
             return ResponseEntity.noContent().build();
         }
