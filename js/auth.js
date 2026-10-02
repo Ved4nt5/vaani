@@ -92,6 +92,7 @@ loginForm.addEventListener('submit', async e => {
     localStorage.setItem('vaani_user_name', data.name);
     localStorage.setItem('vaani_user_email', data.email);
 
+    setLoading(btn, false);
     showSuccessMsg('Login successful! Redirecting...');
     setTimeout(() => { window.location.href = 'index.html'; }, 500);
   } catch (err) {
@@ -134,8 +135,12 @@ signupForm.addEventListener('submit', async e => {
       return;
     }
 
+    setLoading(btn, false);
     // Show OTP section
     document.getElementById('otpEmailDisplay').textContent = signupEmail;
+    if (data.otpCode) {
+      document.getElementById('otpCode').value = data.otpCode;
+    }
     showForm(otpSection);
     showSuccessMsg(data.message || 'Verification code sent! Check your email.');
   } catch (err) {
@@ -145,6 +150,13 @@ signupForm.addEventListener('submit', async e => {
 });
 
 // ── OTP Verification ──────────────────────────────────────
+document.getElementById('otpCode').addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    document.getElementById('verifyOtpBtn').click();
+  }
+});
+
 document.getElementById('verifyOtpBtn').addEventListener('click', async () => {
   hideMessages();
 
@@ -177,6 +189,7 @@ document.getElementById('verifyOtpBtn').addEventListener('click', async () => {
     localStorage.setItem('vaani_user_name', data.name);
     localStorage.setItem('vaani_user_email', data.email);
 
+    setLoading(btn, false);
     showSuccessMsg('Account verified! Redirecting...');
     setTimeout(() => { window.location.href = 'index.html'; }, 500);
   } catch (err) {
@@ -205,7 +218,10 @@ document.getElementById('resendOtp').addEventListener('click', async e => {
 
     const data = await res.json();
     if (res.ok) {
-      showSuccessMsg('New verification code sent! Check your email.');
+      if (data.otpCode) {
+        document.getElementById('otpCode').value = data.otpCode;
+      }
+      showSuccessMsg(data.message || 'New verification code sent! Check your email.');
     } else {
       showError(data.error || 'Failed to resend code.');
     }

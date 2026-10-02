@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Vaani — AI Voice to Text &amp; Summarizer</title>
+  <meta name="description" content="AI-powered voice recording, transcription, and lecture summarization platform for students, educators, and professionals.">
+  <meta property="og:title" content="Vaani — AI Voice to Text &amp; Summarizer">
+  <meta property="og:description" content="AI-powered voice recording, transcription, and lecture summarization platform for students, educators, and professionals.">
   <link rel="stylesheet" href="css/style.css">
   <script>
     // Auth gate — redirect to login if not authenticated
@@ -20,6 +23,8 @@
         <button class="active" data-page="dashboard">Dashboard</button>
         <button data-page="new">New Lecture</button>
         <button data-page="recordings">My Recordings</button>
+        <button data-page="tutor">AI Tutor</button>
+        <button data-page="voice">Vaani Voice</button>
         <button data-page="settings">Settings</button>
       </nav>
       <button class="logout" id="logout">Logout</button>
@@ -157,8 +162,12 @@
           </div>
           <div class="card">
             <h2>Quick Actions</h2>
-            <p class="muted">Copy transcript or summary for notes.</p>
-            <button class="primary" id="copy" style="margin-top: 15px;">Copy Summary</button>
+            <p class="muted">Copy summary for notes or ask the AI Tutor a doubt about this lecture.</p>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top: 15px;">
+              <button class="primary" id="copy">Copy Summary</button>
+              <button class="outline" id="askTutorFromDetail">Ask AI Tutor</button>
+              <button class="outline" id="speakAiFromDetail">Speak with AI Voice</button>
+            </div>
           </div>
         </div>
 
@@ -192,6 +201,135 @@
             </thead>
             <tbody id="allrows"></tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- AI TUTOR (STUDENT DOUBT SOLVER) -->
+      <section id="tutor" class="page">
+        <div class="crumb">Dashboard &rsaquo; AI Tutor</div>
+        <div class="detailhead">
+          <div>
+            <h1>AI Student Tutor</h1>
+            <p class="muted">Have a doubt from your lecture or coursework? Ask the AI Tutor for step-by-step explanations or hear answers spoken aloud.</p>
+          </div>
+          <button class="outline" data-page="voice">Switch to Vaani Voice</button>
+        </div>
+
+        <div class="card tutor-toolbar">
+          <div class="tutor-control-group">
+            <label class="meta-label">
+              Lecture Context
+              <select id="tutorLectureSelect" class="meta-input">
+                <option value="">General Academic Doubt (All Topics)</option>
+              </select>
+            </label>
+            <label class="meta-label">
+              AI Tutor Voice
+              <select id="tutorVoiceSelect" class="meta-input">
+                <option value="Kore">Kore — Warm &amp; Clear</option>
+                <option value="Puck">Puck — Energetic Tutor</option>
+                <option value="Charon">Charon — Deep &amp; Calm</option>
+                <option value="Fenrir">Fenrir — Focused Mentor</option>
+                <option value="Zephyr">Zephyr — Friendly Guide</option>
+              </select>
+            </label>
+            <label class="meta-label tutor-toggle-label">
+              Auto-Speak Replies
+              <span class="tutor-checkbox-wrap">
+                <input type="checkbox" id="tutorAutoSpeak" checked>
+                <span>Speak answers aloud with AI Voice</span>
+              </span>
+            </label>
+          </div>
+
+          <div class="tutor-chips">
+            <button type="button" class="outline tutor-prompt-btn" data-prompt="Can you explain the main concepts of this lecture in simple terms?">Explain main concepts simply</button>
+            <button type="button" class="outline tutor-prompt-btn" data-prompt="Give me a real-world example to understand this topic better.">Give a real-world example</button>
+            <button type="button" class="outline tutor-prompt-btn" data-prompt="Quiz me with 3 important exam questions from this lecture.">Quiz me with 3 questions</button>
+            <button type="button" class="outline tutor-prompt-btn" data-prompt="What are the key formulas, definitions, or takeaways I should memorize?">Key exam takeaways</button>
+          </div>
+        </div>
+
+        <div class="card tutor-chat-card">
+          <div id="tutorMessages" class="tutor-messages">
+            <div class="tutor-msg ai">
+              <div class="tutor-msg-header">
+                <b>Vaani AI Tutor</b>
+                <button type="button" class="tutor-speak-btn" data-speak="Hello! I am your Vaani AI Tutor. Select any lecture above or ask me any academic doubt, and I will explain it step by step.">Listen</button>
+              </div>
+              <div class="tutor-msg-body">Hello! I am your Vaani AI Tutor. Select any lecture above or ask me any academic doubt, and I will explain it step by step.</div>
+            </div>
+          </div>
+
+          <form id="tutorForm" class="tutor-input-row">
+            <input id="tutorInput" type="text" class="meta-input" placeholder="Type your doubt or question here (e.g., What is the difference between supervised and unsupervised learning?)..." autocomplete="off">
+            <button type="button" class="outline" id="tutorMicBtn" title="Speak your doubt">Speak Doubt</button>
+            <button type="submit" class="primary" id="tutorSendBtn">Ask Tutor</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- VAANI VOICE (SEPARATE AI VOICE & WAVE VISUALIZER) -->
+      <section id="voice" class="page">
+        <div class="crumb">Dashboard &rsaquo; Vaani Voice</div>
+        <div class="detailhead">
+          <div>
+            <h1>Vaani Voice — Speak with AI Tutor</h1>
+            <p class="muted">Interactive voice conversation with your AI Tutor. Speak into your microphone and listen as the AI responds in a dedicated voice.</p>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <button class="outline" id="voiceThemeBtn" type="button">Toggle Dark Wave</button>
+            <button class="outline" data-page="tutor" type="button">Open Chat View</button>
+          </div>
+        </div>
+
+        <div class="card voice-settings-bar">
+          <label class="meta-label">
+            Lecture Context for Voice Session
+            <select id="voiceLectureSelect" class="meta-input">
+              <option value="">General Academic Doubt (All Topics)</option>
+            </select>
+          </label>
+          <label class="meta-label">
+            Select Separate AI Voice Persona
+            <select id="voicePersonaSelect" class="meta-input">
+              <option value="Kore">Kore — Warm &amp; Clear</option>
+              <option value="Puck">Puck — Energetic Tutor</option>
+              <option value="Charon">Charon — Deep &amp; Calm</option>
+              <option value="Fenrir">Fenrir — Focused Mentor</option>
+              <option value="Zephyr">Zephyr — Friendly Guide</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="vaani-voice-stage" id="voiceStage">
+          <div class="voice-state-indicator" id="voiceStateBadge">AI Voice Ready</div>
+          <canvas id="c"></canvas>
+          <div class="voice-btn-row">
+            <button id="b" type="button">Use my microphone</button>
+            <button id="voiceStopBtn" type="button" class="hidden">Stop Microphone</button>
+            <button id="voiceStopAiSpeechBtn" type="button" class="hidden">Stop AI Voice</button>
+          </div>
+          <small id="s">Tap to make the wave follow your voice and speak with your AI Tutor</small>
+
+          <div class="voice-transcript-panel" id="voiceTranscriptPanel">
+            <div class="voice-turn">
+              <span class="voice-role">You (Student):</span>
+              <p id="voiceStudentText">Tap "Use my microphone" and speak your question, or ask below.</p>
+            </div>
+            <div class="voice-turn ai-turn">
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                <span class="voice-role">AI Tutor Voice:</span>
+                <button type="button" id="voiceReplayBtn" class="voice-replay-btn">Replay AI Voice</button>
+              </div>
+              <p id="voiceAiText">Hi! I'm ready to listen and explain any concept aloud. What would you like to learn today?</p>
+            </div>
+          </div>
+
+          <form id="voiceQuickForm" class="voice-quick-form">
+            <input id="voiceQuickInput" type="text" placeholder="Or type a question here to hear the AI Voice explain it aloud..." autocomplete="off">
+            <button type="submit" id="voiceQuickAskBtn">Speak with AI Voice</button>
+          </form>
         </div>
       </section>
 
