@@ -1,0 +1,10 @@
+{
+  "name": "Vaani — AI Voice to Text & Summarizer",
+  "description": "AI-powered voice recording, transcription, and lecture summarization platform for students, educators, and professionals.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
