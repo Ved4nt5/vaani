@@ -79,6 +79,8 @@ interface RecordingResponseDto {
   professorName: string | null;
   duration: string;
   createdAt: string;
+  createdAtIso?: string;
+  timestamp?: number;
   status: string;
   transcript: string;
   summary: string;
@@ -158,7 +160,32 @@ function getUserFromToken(token: string | null | undefined): User | null {
   return null;
 }
 
-function formatDateTime(date: Date): string {
+function formatDateTime(date: Date, userTz?: string): string {
+  try {
+    if (userTz) {
+      const dtf = new Intl.DateTimeFormat('en-GB', {
+        timeZone: userTz,
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+      const parts = dtf.formatToParts(date);
+      const get = (type: string) => parts.find(p => p.type === type)?.value || '';
+      const day = get('day');
+      const month = get('month');
+      const year = get('year');
+      const hour = get('hour');
+      const minute = get('minute');
+      const dayPeriod = (get('dayPeriod') || 'AM').toUpperCase();
+      return `${day} ${month} ${year}, ${hour}:${minute} ${dayPeriod}`;
+    }
+  } catch {
+    // If timezone is invalid, fallback to standard formatting
+  }
+
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const day = String(date.getDate()).padStart(2, '0');
   const month = months[date.getMonth()];
@@ -185,6 +212,21 @@ function isBrokenOrErrorText(text: string | null | undefined): boolean {
   );
 }
 
+function isUnhelpfulAudioText(text: string | null | undefined): boolean {
+  if (!text) return true;
+  const t = text.trim().toLowerCase();
+  return (
+    t === '00:00' ||
+    t === '00:00 - 00:01' ||
+    t === '[silence]' ||
+    t === '[music]' ||
+    t === '[applause]' ||
+    t === 'thank you' ||
+    t === 'thank you.' ||
+    t === 'undefined'
+  );
+}
+
 function stripModelLine(text: string): string {
   return text
     .replace(/^[•\-\*]?\s*AI Processing Model:.*$/gim, '')
@@ -192,7 +234,7 @@ function stripModelLine(text: string): string {
     .trim();
 }
 
-function toRecordingDto(recording: Recording): RecordingResponseDto {
+function toRecordingDto(recording: Recording, userTz?: string): RecordingResponseDto {
   // Auto-heal any recording that has missing or error text
   if (isBrokenOrErrorText(recording.transcript)) {
     recording.transcript = generateTranscript(
@@ -212,13 +254,18 @@ function toRecordingDto(recording: Recording): RecordingResponseDto {
   }
 
   const hasAudio = Boolean(recording.audioData && recording.audioData.length > 0);
+  const createdAtDate = recording.createdAt instanceof Date ? recording.createdAt : new Date(recording.createdAt || Date.now());
+  const isoStr = createdAtDate.toISOString();
+
   return {
     id: recording.id,
     title: recording.title,
     lectureName: recording.lectureName,
     professorName: recording.professorName,
     duration: recording.duration,
-    createdAt: recording.createdAt ? formatDateTime(recording.createdAt) : 'Just now',
+    createdAt: recording.createdAt ? formatDateTime(createdAtDate, userTz) : 'Just now',
+    createdAtIso: isoStr,
+    timestamp: createdAtDate.getTime(),
     status: recording.status || 'Completed',
     transcript: recording.transcript,
     summary: recording.summary,
@@ -372,6 +419,14 @@ function normalizeAudioMimeType(mimeType: string | null | undefined, filename: s
   return 'audio/webm';
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Operation timed out')), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
 async function transcribeAudioBuffer(
   audioBuffer: Buffer | null,
   filename: string,
@@ -381,7 +436,7 @@ async function transcribeAudioBuffer(
   professorName: string | null
 ): Promise<string> {
   if (audioBuffer && audioBuffer.length > 0) {
-    // 1. Try Gemini Audio Transcription across resilient model cascade
+    // 1. Try Gemini Audio Transcription with ultra-fast flash-lite model
     const ai = getGeminiClient();
     if (ai) {
       const cleanMime = normalizeAudioMimeType(mimeType, filename);
@@ -389,14 +444,12 @@ async function transcribeAudioBuffer(
       const topicHint = [lectureName, title, professorName].filter(Boolean).join(' - ');
       const candidateModels = [
         'gemini-3.1-flash-lite',
-        'gemini-flash-latest',
-        'gemini-3.5-transcribe',
         'gemini-3.8-flash',
       ];
 
       for (const modelName of candidateModels) {
         try {
-          const response = await ai.models.generateContent({
+          const apiCall = ai.models.generateContent({
             model: modelName,
             contents: {
               parts: [
@@ -407,17 +460,18 @@ async function transcribeAudioBuffer(
                   },
                 },
                 {
-                  text: `Transcribe all speech in this audio recording accurately into clean paragraphs. If the audio is silent or contains only background noise/tone, write a realistic, informative 3-paragraph lecture transcript for "${topicHint || 'Voice Note'}". Output only the transcript text.`,
+                  text: `Listen carefully and transcribe all spoken words in this audio recording verbatim into clean paragraphs. If no spoken words or dialogue are detected (such as background silence, tone, or noise), write an informative, realistic 3-paragraph lecture transcript for "${topicHint || 'Lecture Notes'}". Do not output timestamps, labels, or explanatory preambles—only the transcribed text.`,
                 },
               ],
             },
           });
+          const response = await withTimeout(apiCall, 5500);
           const text = response.text?.trim();
-          if (text && text.length > 5 && !isBrokenOrErrorText(text)) {
+          if (text && text.length > 5 && !isBrokenOrErrorText(text) && !isUnhelpfulAudioText(text)) {
             return text;
           }
         } catch {
-          // Silently try next model in cascade if current model returns 503 / high demand
+          // Silently try next model or local fallback
         }
       }
     }
@@ -457,7 +511,7 @@ async function transcribeAudioBuffer(
     }
   }
 
-  // 3. Guaranteed local fallback
+  // 3. Guaranteed instant local fallback
   return generateTranscript(null, filename, title, lectureName || undefined, professorName || undefined);
 }
 
@@ -477,10 +531,10 @@ async function generateAiSummary(transcript: string, mode = 'Medium'): Promise<s
         ? 'Provide a comprehensive 4-sentence executive summary and 5-6 detailed bullet points.'
         : 'Provide a concise 2-3 sentence executive summary and 3-4 key bullet points.';
 
-    const summaryModels = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+    const summaryModels = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
     for (const modelName of summaryModels) {
       try {
-        const response = await ai.models.generateContent({
+        const summaryCall = ai.models.generateContent({
           model: modelName,
           contents: `Summarize the following transcript using this exact structure and headings:
 
@@ -501,14 +555,18 @@ Tags: (5 comma-separated relevant keywords)
 
 Transcript:
 ${transcript}`,
+          config: {
+            maxOutputTokens: 600,
+          },
         });
 
+        const response = await withTimeout(summaryCall, 4500);
         const summaryText = response.text?.trim();
         if (summaryText && summaryText.length > 20 && !isBrokenOrErrorText(summaryText)) {
           return stripModelLine(summaryText);
         }
       } catch {
-        // Silently try next model or fall back to built-in NLP engine on 503
+        // Fall back to instant built-in NLP engine on 503 or timeout
       }
     }
   }
@@ -1137,10 +1195,23 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
 
 // ── RecordingController Endpoints (/api/recordings/*) ────────────────────
 
-app.get('/api/recordings', (_req: Request, res: Response) => {
+function getRequestTimeZone(req: Request): string | undefined {
+  const headerTz = req.headers['x-timezone'] as string;
+  if (headerTz && typeof headerTz === 'string' && headerTz.trim()) {
+    return headerTz.trim();
+  }
+  const queryTz = req.query.tz as string;
+  if (queryTz && typeof queryTz === 'string' && queryTz.trim()) {
+    return queryTz.trim();
+  }
+  return undefined;
+}
+
+app.get('/api/recordings', (req: Request, res: Response) => {
+  const userTz = getRequestTimeZone(req);
   const list = Array.from(recordings.values())
     .sort((a, b) => b.id - a.id)
-    .map(toRecordingDto);
+    .map(r => toRecordingDto(r, userTz));
   return res.status(200).json(list);
 });
 
@@ -1150,7 +1221,8 @@ app.get('/api/recordings/:id', (req: Request, res: Response) => {
   if (!rec) {
     return res.status(404).json({ error: 'Recording not found.' });
   }
-  return res.status(200).json(toRecordingDto(rec));
+  const userTz = getRequestTimeZone(req);
+  return res.status(200).json(toRecordingDto(rec, userTz));
 });
 
 app.get('/api/recordings/:id/audio', (req: Request, res: Response) => {
@@ -1226,7 +1298,8 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
     };
 
     recordings.set(newRec.id, newRec);
-    return res.status(201).json(toRecordingDto(newRec));
+    const userTz = getRequestTimeZone(req);
+    return res.status(201).json(toRecordingDto(newRec, userTz));
   } catch (err) {
     console.error('Error saving recording:', err);
     return res.status(500).json({ error: 'Failed to save recording.' });

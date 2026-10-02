@@ -34,6 +34,7 @@
       <header>
         <span class="mobile-brand"><b>Vaani</b></span>
         <button class="primary" data-page="new">+ New Lecture</button>
+        <button class="outline" data-page="new" data-tab="upload" style="margin-left:6px;">⬆️ Upload Audio</button>
         <span class="profile" id="profileName">User</span>
       </header>
 
@@ -49,7 +50,10 @@
         <div class="card">
           <div class="cardhead">
             <h2>Recent Lectures</h2>
-            <button class="outline" data-page="recordings">View All</button>
+            <div style="display:flex;gap:8px;">
+              <button class="primary" data-page="new" data-tab="upload" style="padding:8px 14px;font-size:12.5px;">⬆️ Upload Audio</button>
+              <button class="outline" data-page="recordings">View All</button>
+            </div>
           </div>
           <table>
             <thead>
@@ -110,12 +114,33 @@
           </div>
 
           <div id="uploadPane" class="upload hidden">
-            <label>
-              <b>Choose an audio file</b>
-              <small>MP3, WAV, WEBM or M4A &bull; Max 200 MB</small>
-              <input id="audio" type="file" accept="audio/*">
+            <label id="dropZone" for="audio" style="position:relative;cursor:pointer;transition:border-color .2s,background .2s;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="var(--p)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:6px;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <b style="font-size:15px;color:var(--text);">Choose an audio file or drag &amp; drop here</b>
+              <small style="color:var(--muted);">Supports MP3, WAV, M4A, WEBM, AAC, FLAC, OGG &bull; Up to 200 MB</small>
+              <span class="outline" style="margin-top:8px;pointer-events:none;padding:7px 16px;font-size:12.5px;">Browse Audio File</span>
+              <input id="audio" type="file" accept="audio/*,.mp3,.wav,.webm,.m4a,.aac,.ogg,.flac,.mp4,.wma,.opus,.m4p">
             </label>
-            <p id="file"></p>
+
+            <div id="fileInfoBox" style="display:none;margin-top:14px;padding:12px 16px;border-radius:10px;background:#f0eaff;border:1px solid #d7c9f8;text-align:left;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                  <span style="font-size:22px;">🎵</span>
+                  <div style="min-width:0;">
+                    <b id="fileInfoName" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-size:13.5px;"></b>
+                    <small id="fileInfoSize" style="color:var(--muted);font-size:12px;"></small>
+                  </div>
+                </div>
+                <button type="button" class="outline" id="removeFileBtn" style="padding:4px 10px;font-size:11.5px;color:#d32f2f;border-color:#ffcdd2;">Remove</button>
+              </div>
+              <audio id="uploadAudioPreview" controls style="width:100%;height:32px;margin-top:10px;outline:none;display:none;"></audio>
+            </div>
+
+            <p id="file" style="margin-top:6px;font-weight:600;color:var(--p);font-size:12.5px;"></p>
             <div style="margin-top: 15px; text-align: left;">
               <label style="font-weight: 700; font-size: 13px; color: var(--p); display: block; margin-bottom: 6px;">
                 Optional Transcript Notes (leave empty for AI auto-transcription):
@@ -351,6 +376,9 @@
               <option>Short</option>
               <option>Detailed</option>
             </select>
+          </label>
+          <label>System Timezone
+            <input id="settingsTimezone" readonly style="background:#f8f9fd;color:#4920c5;font-weight:500;cursor:default;" title="All recording dates and timestamps are automatically synchronized to your local timezone">
           </label>
           <button class="primary" id="save">Save Changes</button>
           
