@@ -54,6 +54,11 @@ function hideMessages() {
   authSuccess.classList.remove('show');
 }
 
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
 function setLoading(btn, loading) {
   btn.disabled = loading;
   btn.classList.toggle('loading', loading);
@@ -138,11 +143,18 @@ signupForm.addEventListener('submit', async e => {
     setLoading(btn, false);
     // Show OTP section
     document.getElementById('otpEmailDisplay').textContent = signupEmail;
-    if (data.otpCode) {
-      document.getElementById('otpCode').value = data.otpCode;
+    const otpInput = document.getElementById('otpCode');
+    if (otpInput) {
+      otpInput.value = '';
+      setTimeout(() => otpInput.focus(), 150);
     }
     showForm(otpSection);
-    showSuccessMsg(data.message || 'Verification code sent! Check your email.');
+    const badge = document.getElementById('otpSmtpBadge');
+    if (badge) {
+      badge.style.display = 'block';
+      badge.innerHTML = `✉️ Verification email sent to <b>${escapeHtml(signupEmail)}</b>. Please check your inbox and enter the 6-digit code below.`;
+    }
+    showSuccessMsg('Verification code sent to ' + signupEmail + '! Check your inbox and spam folder.');
   } catch (err) {
     showError('Could not connect to server. Please try again.');
     setLoading(btn, false);
@@ -203,25 +215,32 @@ document.getElementById('resendOtp').addEventListener('click', async e => {
   e.preventDefault();
   hideMessages();
 
-  if (!signupEmail || !signupPassword) {
+  if (!signupEmail) {
     showError('Session expired. Please sign up again.');
     showForm(signupForm);
     return;
   }
 
   try {
-    const res = await fetch(API_AUTH + '/signup', {
+    const res = await fetch(API_AUTH + '/resend-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: signupName, email: signupEmail, password: signupPassword })
+      body: JSON.stringify({ email: signupEmail })
     });
 
     const data = await res.json();
     if (res.ok) {
-      if (data.otpCode) {
-        document.getElementById('otpCode').value = data.otpCode;
+      const otpInput = document.getElementById('otpCode');
+      if (otpInput) {
+        otpInput.value = '';
+        setTimeout(() => otpInput.focus(), 150);
       }
-      showSuccessMsg(data.message || 'New verification code sent! Check your email.');
+      const badge = document.getElementById('otpSmtpBadge');
+      if (badge) {
+        badge.style.display = 'block';
+        badge.innerHTML = `✉️ Fresh verification email sent to <b>${escapeHtml(signupEmail)}</b>. Please check your inbox and enter the 6-digit code below.`;
+      }
+      showSuccessMsg('New verification code sent to ' + signupEmail + '! Check your inbox and spam folder.');
     } else {
       showError(data.error || 'Failed to resend code.');
     }

@@ -353,6 +353,49 @@
             </select>
           </label>
           <button class="primary" id="save">Save Changes</button>
+          
+          <div style="margin-top: 36px; border-top: 1px solid var(--border); padding-top: 24px;">
+            <h2 style="margin: 0 0 6px;">SMTP Email Delivery &amp; Diagnostics</h2>
+            <p class="muted" style="margin-bottom: 16px;">Live delivery status for verification codes, password resets, and notifications.</p>
+            <div id="smtpStatusBox" style="padding: 14px 16px; border-radius: 9px; background: #faf9fe; border: 1px solid var(--border); font-size: 13.5px; line-height: 1.6;">
+              <span id="smtpStatusText">Checking SMTP server connection...</span>
+            </div>
+
+            <div style="margin-top: 18px; display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <label class="meta-label">
+                SMTP Host
+                <input id="smtpHostInput" type="text" placeholder="smtp.gmail.com" class="meta-input">
+              </label>
+              <label class="meta-label">
+                SMTP Port
+                <input id="smtpPortInput" type="number" placeholder="587" class="meta-input">
+              </label>
+              <label class="meta-label">
+                SMTP Username / Email
+                <input id="smtpUserInput" type="email" placeholder="e.g. yourname@gmail.com" class="meta-input">
+              </label>
+              <label class="meta-label">
+                SMTP App Password
+                <input id="smtpPassInput" type="password" placeholder="e.g. 16-character Gmail App Password" class="meta-input">
+              </label>
+            </div>
+
+            <div style="display:flex; gap:10px; margin-top: 14px; flex-wrap:wrap;">
+              <button class="primary" id="smtpSaveBtn" type="button">Save &amp; Activate SMTP</button>
+              <button class="outline" id="smtpClearBtn" type="button">Clear Saved SMTP</button>
+            </div>
+
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--border);">
+              <label class="meta-label" style="margin-bottom: 6px;">Test SMTP Email Delivery</label>
+              <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <input id="smtpTestRecipient" type="email" placeholder="Recipient email for test..." style="flex:1; min-width:210px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
+                <button class="outline" id="smtpTestBtn" type="button" style="white-space:nowrap;">Send Test Email</button>
+              </div>
+            </div>
+            <p style="font-size:12px; color:var(--muted); margin-top:10px; line-height:1.5;">
+              Tip: For Gmail accounts, generate a 16-character App Password at <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" style="color:var(--p); font-weight:600;">Google Account &rsaquo; Security &rsaquo; App Passwords</a>. You can also configure <code>SMTP_USER</code> and <code>SMTP_PASS</code> in environment variables.
+            </p>
+          </div>
         </div>
       </section>
     </main>

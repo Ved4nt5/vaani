@@ -189,6 +189,9 @@ function page(id) {
   if (id === 'dashboard' || id === 'recordings') {
     loadRecordings();
   }
+  if (id === 'settings') {
+    loadSmtpStatus();
+  }
   document.querySelectorAll('.page').forEach(x => x.classList.toggle('active', x.id === id));
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x.dataset.page === id));
   if (id === 'voice' && typeof resizeVoiceCanvas === 'function') {
@@ -791,6 +794,125 @@ document.querySelector('#save').onclick = () => {
   setUserInfo();
   toast('Settings saved successfully.');
 };
+
+// ── SMTP Status & Diagnostic Testing ────────────────────────
+async function loadSmtpStatus() {
+  const statusEl = document.getElementById('smtpStatusText');
+  const recipientInput = document.getElementById('smtpTestRecipient');
+  const hostInput = document.getElementById('smtpHostInput');
+  const portInput = document.getElementById('smtpPortInput');
+  const userInput = document.getElementById('smtpUserInput');
+  if (!statusEl) return;
+  try {
+    const res = await fetch('/api/auth/smtp-status');
+    if (res.ok) {
+      const data = await res.json();
+      if (hostInput && !hostInput.value) hostInput.value = data.host || 'smtp.gmail.com';
+      if (portInput && !portInput.value) portInput.value = data.port || 587;
+      if (data.configured) {
+        statusEl.innerHTML = `<span style="color:#17864a; font-weight:700;">● SMTP Active &amp; Ready</span><br>Connected to <b>${escapeHtml(data.host)}:${data.port}</b> as <code>${escapeHtml(data.user || 'configured-user')}</code> (Sender: <i>${escapeHtml(data.from)}</i>). Live verification emails will be delivered to student inboxes.`;
+      } else {
+        statusEl.innerHTML = `<span style="color:#d97706; font-weight:700;">▲ SMTP Not Configured</span><br>Enter your Gmail / SMTP credentials below or set <code>SMTP_USER</code> and <code>SMTP_PASS</code> in environment variables. Currently running in demo mode (verification codes are generated instantly on screen).`;
+      }
+      if (recipientInput && !recipientInput.value) {
+        recipientInput.value = localStorage.getItem('vaani_user_email') || '';
+      }
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Could not retrieve SMTP status from server.';
+  }
+}
+
+const smtpSaveBtn = document.getElementById('smtpSaveBtn');
+if (smtpSaveBtn) {
+  smtpSaveBtn.onclick = async () => {
+    const host = (document.getElementById('smtpHostInput')?.value || '').trim();
+    const port = Number(document.getElementById('smtpPortInput')?.value) || 587;
+    const user = (document.getElementById('smtpUserInput')?.value || '').trim();
+    const pass = (document.getElementById('smtpPassInput')?.value || '').trim();
+
+    if (!user || !pass) {
+      toast('Please enter both SMTP Username/Email and App Password.');
+      return;
+    }
+
+    smtpSaveBtn.disabled = true;
+    smtpSaveBtn.textContent = 'Saving...';
+    try {
+      const res = await fetch('/api/auth/save-smtp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host, port, user, pass, secure: port === 465 }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast('SMTP settings saved successfully!');
+        loadSmtpStatus();
+      } else {
+        toast(data.error || 'Failed to save SMTP settings.');
+      }
+    } catch (e) {
+      toast('Error saving SMTP settings.');
+    } finally {
+      smtpSaveBtn.disabled = false;
+      smtpSaveBtn.textContent = 'Save & Activate SMTP';
+    }
+  };
+}
+
+const smtpClearBtn = document.getElementById('smtpClearBtn');
+if (smtpClearBtn) {
+  smtpClearBtn.onclick = async () => {
+    try {
+      const res = await fetch('/api/auth/save-smtp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clear: true }),
+      });
+      if (res.ok) {
+        const passInput = document.getElementById('smtpPassInput');
+        if (passInput) passInput.value = '';
+        toast('Saved SMTP configuration cleared.');
+        loadSmtpStatus();
+      }
+    } catch (e) {
+      toast('Error clearing SMTP configuration.');
+    }
+  };
+}
+
+const smtpTestBtn = document.getElementById('smtpTestBtn');
+if (smtpTestBtn) {
+  smtpTestBtn.onclick = async () => {
+    const recipientInput = document.getElementById('smtpTestRecipient');
+    const email = recipientInput ? recipientInput.value.trim() : '';
+    if (!email) {
+      toast('Please enter a recipient email address for testing.');
+      return;
+    }
+    smtpTestBtn.disabled = true;
+    smtpTestBtn.textContent = 'Sending Test...';
+    try {
+      const res = await fetch('/api/auth/test-smtp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast('✅ Test email sent! Check ' + email);
+        loadSmtpStatus();
+      } else {
+        toast('❌ SMTP Test Failed: ' + (data.error || 'Check server logs'));
+      }
+    } catch (e) {
+      toast('Error reaching server for SMTP test.');
+    } finally {
+      smtpTestBtn.disabled = false;
+      smtpTestBtn.textContent = 'Send Test Email';
+    }
+  };
+}
 document.querySelector('#logout').onclick = async () => {
   const token = getAuthToken();
   if (token) {
