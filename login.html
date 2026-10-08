@@ -11,17 +11,27 @@
     <div class="auth-card">
       <div class="auth-brand">
         <img src="vaani.png" width="140" height="90" alt="Vaani">
-        <p class="auth-tagline">AI Voice to Text & Summarizer</p>
+        <p class="auth-tagline">AI Voice to Text &amp; Summarizer</p>
+      </div>
+
+      <!-- ROLE SELECTION -->
+      <div class="role-selector" id="roleSelector" role="tablist" aria-label="Select Role">
+        <button type="button" class="role-btn" id="roleFacultyBtn" data-role="faculty">
+          👨‍🏫 Faculty
+        </button>
+        <button type="button" class="role-btn active" id="roleStudentBtn" data-role="student">
+          🎓 Student
+        </button>
       </div>
 
       <!-- LOGIN FORM -->
       <form id="loginForm" class="auth-form active">
-        <h2>Welcome Back</h2>
-        <p class="auth-subtitle">Enter your credentials to continue</p>
+        <h2 id="loginHeading">Student Login</h2>
+        <p class="auth-subtitle" id="loginSubtitle">Enter your student credentials to continue</p>
 
         <label class="auth-label">
-          Email
-          <input type="email" id="loginEmail" placeholder="you@gmail.com" required>
+          <span id="loginEmailLabel">Student Email</span>
+          <input type="email" id="loginEmail" placeholder="student@vaani.edu" required>
         </label>
 
         <label class="auth-label">
@@ -29,7 +39,13 @@
           <input type="password" id="loginPassword" placeholder="Enter your password" required>
         </label>
 
-        <button type="submit" class="auth-btn" id="loginBtn">Login</button>
+        <button type="submit" class="auth-btn" id="loginBtn">Login as Student</button>
+
+        <div class="auth-demo-hint" id="authDemoHint">
+          <span>Quick Fill:</span>
+          <button type="button" class="demo-pill" id="fillFacultyDemo">👨‍🏫 Faculty Account</button>
+          <button type="button" class="demo-pill" id="fillStudentDemo">🎓 Student Account</button>
+        </div>
 
         <p class="auth-switch">
           Don't have an account? <a href="#" id="showSignup">Sign Up</a>
@@ -38,8 +54,8 @@
 
       <!-- SIGNUP FORM -->
       <form id="signupForm" class="auth-form">
-        <h2>Create Account</h2>
-        <p class="auth-subtitle">Sign up to start using Vaani</p>
+        <h2 id="signupHeading">Create Student Account</h2>
+        <p class="auth-subtitle" id="signupSubtitle">Sign up to start using Vaani</p>
 
         <label class="auth-label">
           Full Name
@@ -47,8 +63,13 @@
         </label>
 
         <label class="auth-label">
-          Email
+          <span id="signupEmailLabel">Student Email</span>
           <input type="email" id="signupEmail" placeholder="you@gmail.com" required>
+        </label>
+
+        <label class="auth-label" id="signupDeptWrap" style="display:none;">
+          Department
+          <input type="text" id="signupDepartment" placeholder="e.g. Computer Engineering &amp; AI">
         </label>
 
         <label class="auth-label">

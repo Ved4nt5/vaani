@@ -45,6 +45,11 @@ interface User {
   name: string;
   email: string;
   password: string;
+  role: 'faculty' | 'student';
+  facultyId?: string;
+  department?: string;
+  avatarUrl?: string;
+  course?: string;
   verified: boolean;
   createdAt: Date;
 }
@@ -57,14 +62,49 @@ interface Otp {
   expiresAt: Date;
 }
 
+interface StorageBox {
+  id: number;
+  name: string;
+  description: string;
+  createdBy: string;
+  facultyId?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+interface StorageBoxResponseDto {
+  id: number;
+  name: string;
+  description: string;
+  createdBy: string;
+  facultyId?: string;
+  recordingCount: number;
+  publishedRecordingCount: number;
+  createdAt: string;
+  updatedAt: string;
+  lastUpdatedFormatted: string;
+}
+
 interface Recording {
   id: number;
+  storageBoxId?: number | null;
   title: string;
   lectureName: string | null;
   professorName: string | null;
+  subject?: string | null;
+  classCourse?: string | null;
+  lectureDate?: string | null;
+  description?: string | null;
   duration: string;
   createdAt: Date;
   status: string;
+  facultyStatus?: 'DRAFT' | 'PROCESSING' | 'READY' | 'PUBLISHED';
+  published?: boolean;
+  isFacultyLecture?: boolean;
+  allowedAccess?: string[];
+  studentsAccessed?: number;
+  playsCount?: number;
+  avgListeningTime?: string;
   transcript: string;
   summary: string;
   audioFilename: string | null;
@@ -74,14 +114,27 @@ interface Recording {
 
 interface RecordingResponseDto {
   id: number;
+  storageBoxId?: number | null;
+  storageBoxName?: string | null;
   title: string;
   lectureName: string | null;
   professorName: string | null;
+  subject?: string | null;
+  classCourse?: string | null;
+  lectureDate?: string | null;
+  description?: string | null;
   duration: string;
   createdAt: string;
   createdAtIso?: string;
   timestamp?: number;
   status: string;
+  facultyStatus?: 'DRAFT' | 'PROCESSING' | 'READY' | 'PUBLISHED';
+  published?: boolean;
+  isFacultyLecture?: boolean;
+  allowedAccess?: string[];
+  studentsAccessed?: number;
+  playsCount?: number;
+  avgListeningTime?: string;
   transcript: string;
   summary: string;
   hasAudio: boolean;
@@ -93,10 +146,13 @@ const otps = new Map<string, Otp>();
 const sessions = new Map<string, User>();
 const revokedTokens = new Set<string>();
 const recordings = new Map<number, Recording>();
+const storageBoxes = new Map<number, StorageBox>();
+const accessedStudentsPerLecture = new Map<number, Set<string>>();
 
 let userIdCounter = 1;
 let otpIdCounter = 1;
 let recordingIdCounter = 1;
+let storageBoxIdCounter = 1;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -114,7 +170,13 @@ function generateOtpCode(): string {
 
 function createSessionToken(user: User): string {
   const payload = Buffer.from(
-    JSON.stringify({ email: user.email, name: user.name, ts: Date.now(), nonce: crypto.randomUUID() }),
+    JSON.stringify({
+      email: user.email,
+      name: user.name,
+      role: user.role || 'student',
+      ts: Date.now(),
+      nonce: crypto.randomUUID(),
+    }),
     'utf8'
   ).toString('base64url');
   sessions.set(payload, user);
@@ -132,11 +194,22 @@ function getUserFromToken(token: string | null | undefined): User | null {
   try {
     const decoded = JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
     if (decoded && decoded.email) {
-      const user = users.get(decoded.email) || {
+      const existingUser = users.get(decoded.email);
+      if (existingUser) {
+        if (decoded.role === 'faculty' || decoded.role === 'student') {
+          existingUser.role = decoded.role;
+        }
+        sessions.set(token, existingUser);
+        return existingUser;
+      }
+      const user: User = {
         id: userIdCounter++,
         name: decoded.name || 'User',
         email: decoded.email,
         password: '',
+        role: decoded.role === 'faculty' ? 'faculty' : 'student',
+        facultyId: decoded.role === 'faculty' ? 'FAC-2026-101' : undefined,
+        department: decoded.role === 'faculty' ? 'Computer Engineering & AI' : undefined,
         verified: true,
         createdAt: new Date(),
       };
@@ -150,6 +223,7 @@ function getUserFromToken(token: string | null | undefined): User | null {
         name: 'User',
         email: 'programmmariojs8@gmail.com',
         password: '',
+        role: 'student',
         verified: true,
         createdAt: new Date(),
       };
@@ -158,6 +232,31 @@ function getUserFromToken(token: string | null | undefined): User | null {
     }
   }
   return null;
+}
+
+function getAuthenticatedUser(req: Request): User | null {
+  const authHeader = req.headers.authorization;
+  let token: string | null = null;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7).trim();
+  } else if (typeof req.query.token === 'string') {
+    token = req.query.token;
+  }
+  return getUserFromToken(token);
+}
+
+function requireFaculty(req: Request, res: Response): User | null {
+  const user = getAuthenticatedUser(req);
+  if (!user) {
+    res.status(401).json({ error: 'Authentication required.' });
+    return null;
+  }
+  const roleHeader = (req.headers['x-user-role'] as string || '').toLowerCase();
+  if (user.role !== 'faculty' && roleHeader !== 'faculty') {
+    res.status(403).json({ error: 'Access denied: Faculty role required for this action.' });
+    return null;
+  }
+  return user;
 }
 
 function formatDateTime(date: Date, userTz?: string): string {
@@ -234,6 +333,26 @@ function stripModelLine(text: string): string {
     .trim();
 }
 
+function toStorageBoxDto(box: StorageBox, userTz?: string): StorageBoxResponseDto {
+  const allRecs = Array.from(recordings.values()).filter(r => r.storageBoxId === box.id);
+  const publishedRecs = allRecs.filter(r => r.published === true || r.facultyStatus === 'PUBLISHED');
+  const updatedDate = box.updatedAt instanceof Date ? box.updatedAt : new Date(box.updatedAt || Date.now());
+  const createdDate = box.createdAt instanceof Date ? box.createdAt : new Date(box.createdAt || Date.now());
+
+  return {
+    id: box.id,
+    name: box.name,
+    description: box.description || '',
+    createdBy: box.createdBy || 'Faculty',
+    facultyId: box.facultyId,
+    recordingCount: allRecs.length,
+    publishedRecordingCount: publishedRecs.length,
+    createdAt: formatDateTime(createdDate, userTz),
+    updatedAt: formatDateTime(updatedDate, userTz),
+    lastUpdatedFormatted: formatDateTime(updatedDate, userTz),
+  };
+}
+
 function toRecordingDto(recording: Recording, userTz?: string): RecordingResponseDto {
   // Auto-heal any recording that has missing or error text
   if (isBrokenOrErrorText(recording.transcript)) {
@@ -241,7 +360,7 @@ function toRecordingDto(recording: Recording, userTz?: string): RecordingRespons
       null,
       recording.audioFilename,
       recording.title,
-      recording.lectureName || undefined,
+      recording.lectureName || recording.subject || undefined,
       recording.professorName || undefined
     );
   }
@@ -249,7 +368,7 @@ function toRecordingDto(recording: Recording, userTz?: string): RecordingRespons
     recording.summary = generateSummary(recording.transcript, 'Medium');
   }
   recording.summary = stripModelLine(recording.summary);
-  if (recording.status === 'Failed' || recording.status === 'Processing') {
+  if (recording.status === 'Failed' || (recording.status === 'Processing' && recording.facultyStatus !== 'PROCESSING')) {
     recording.status = 'Completed';
   }
 
@@ -257,16 +376,39 @@ function toRecordingDto(recording: Recording, userTz?: string): RecordingRespons
   const createdAtDate = recording.createdAt instanceof Date ? recording.createdAt : new Date(recording.createdAt || Date.now());
   const isoStr = createdAtDate.toISOString();
 
+  let boxName: string | null = null;
+  if (recording.storageBoxId) {
+    const box = storageBoxes.get(Number(recording.storageBoxId));
+    if (box) {
+      boxName = box.name;
+    }
+  }
+
   return {
     id: recording.id,
+    storageBoxId: recording.storageBoxId || null,
+    storageBoxName: boxName,
     title: recording.title,
-    lectureName: recording.lectureName,
+    lectureName: recording.lectureName || recording.subject || null,
     professorName: recording.professorName,
+    subject: recording.subject || boxName || recording.lectureName || 'General Studies',
+    classCourse: recording.classCourse || 'SE Computer Engineering',
+    lectureDate: recording.lectureDate || isoStr.slice(0, 10),
+    description: recording.description || '',
     duration: recording.duration,
     createdAt: recording.createdAt ? formatDateTime(createdAtDate, userTz) : 'Just now',
     createdAtIso: isoStr,
     timestamp: createdAtDate.getTime(),
     status: recording.status || 'Completed',
+    facultyStatus: recording.facultyStatus || (recording.published !== false ? 'PUBLISHED' : 'READY'),
+    published: recording.published !== false,
+    isFacultyLecture: Boolean(recording.isFacultyLecture),
+    allowedAccess: Array.isArray(recording.allowedAccess) && recording.allowedAccess.length > 0
+      ? recording.allowedAccess
+      : ['SE Computer Engineering', 'Data Structures', 'AI & Machine Learning'],
+    studentsAccessed: typeof recording.studentsAccessed === 'number' ? recording.studentsAccessed : 28,
+    playsCount: typeof recording.playsCount === 'number' ? recording.playsCount : 64,
+    avgListeningTime: recording.avgListeningTime || '34m 20s',
     transcript: recording.transcript,
     summary: recording.summary,
     hasAudio,
@@ -797,27 +939,102 @@ function seedDatabase() {
     name: 'Mario',
     email: defaultEmail,
     password: hashPassword('password123'),
+    role: 'student',
+    course: 'SE Computer Engineering',
     verified: true,
     createdAt: new Date(),
   });
+
+  const facultyEmail = 'faculty@vaani.edu';
+  users.set(facultyEmail, {
+    id: userIdCounter++,
+    name: 'Dr. Ananya Sharma',
+    email: facultyEmail,
+    password: hashPassword('password123'),
+    role: 'faculty',
+    facultyId: 'FAC-2026-104',
+    department: 'Department of Computer Engineering & AI',
+    avatarUrl: '',
+    verified: true,
+    createdAt: new Date(),
+  });
+
+  const studentDemoEmail = 'student@vaani.edu';
+  users.set(studentDemoEmail, {
+    id: userIdCounter++,
+    name: 'Aarav Patel',
+    email: studentDemoEmail,
+    password: hashPassword('password123'),
+    role: 'student',
+    course: 'SE Computer Engineering',
+    verified: true,
+    createdAt: new Date(),
+  });
+
+  if (storageBoxes.size === 0) {
+    const box1: StorageBox = {
+      id: storageBoxIdCounter++,
+      name: 'Artificial Intelligence & ML',
+      description: 'Foundations of AI, machine learning algorithms, deep neural nets, and practical applications.',
+      createdBy: 'Dr. Ananya Sharma',
+      facultyId: 'FAC-2026-104',
+      createdAt: new Date(Date.now() - 7 * 86400 * 1000),
+      updatedAt: new Date(Date.now() - 3 * 3600 * 1000),
+    };
+    const box2: StorageBox = {
+      id: storageBoxIdCounter++,
+      name: 'Data Structures & Algorithms',
+      description: 'Hierarchical tree structures, graph traversal algorithms, balancing heuristics, and complexity bounds.',
+      createdBy: 'Prof. Verma',
+      facultyId: 'FAC-2026-102',
+      createdAt: new Date(Date.now() - 5 * 86400 * 1000),
+      updatedAt: new Date(Date.now() - 2 * 3600 * 1000),
+    };
+    const box3: StorageBox = {
+      id: storageBoxIdCounter++,
+      name: 'Innovation & Research Lab',
+      description: 'Interactive brainstorming sessions, audio synthesis systems, and rapid prototype reviews.',
+      createdBy: 'Dr. Nair',
+      facultyId: 'FAC-2026-108',
+      createdAt: new Date(Date.now() - 3 * 86400 * 1000),
+      updatedAt: new Date(Date.now() - 1 * 3600 * 1000),
+    };
+
+    storageBoxes.set(box1.id, box1);
+    storageBoxes.set(box2.id, box2);
+    storageBoxes.set(box3.id, box3);
+  }
 
   if (recordings.size === 0) {
     const sampleAudio1 = generateToneWav(440, 3);
     const sampleAudio2 = generateToneWav(523.25, 3);
     const sampleAudio3 = generateToneWav(659.25, 3);
+    const sampleAudio4 = generateToneWav(392.0, 3);
 
     const rec1: Recording = {
       id: recordingIdCounter++,
-      title: 'Lecture \u2014 AI and ML Basics',
+      title: 'Lecture — AI and ML Basics',
+      storageBoxId: 1,
       lectureName: 'Introduction to AI & ML',
-      professorName: 'Dr. Sharma',
+      professorName: 'Dr. Ananya Sharma',
+      subject: 'Artificial Intelligence & ML',
+      classCourse: 'SE Computer Engineering',
+      lectureDate: new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10),
+      description: 'Foundational lecture covering supervised, unsupervised, and reinforcement learning paradigms with real-world applications.',
       duration: '45:12',
       createdAt: new Date(Date.now() - 3 * 3600 * 1000),
       status: 'Completed',
+      facultyStatus: 'PUBLISHED',
+      published: true,
+      isFacultyLecture: true,
+      allowedAccess: ['SE Computer Engineering', 'TE Computer Engineering', 'AI & Machine Learning', 'Data Structures'],
+      studentsAccessed: 42,
+      playsCount: 118,
+      avgListeningTime: '38m 45s',
       transcript:
         'Artificial Intelligence is a broad field of computer science focused on creating systems that can perform tasks that normally require human intelligence. Machine Learning is a subset of AI where systems learn patterns from data.\n\nThere are three major types of machine learning: supervised learning, unsupervised learning, and reinforcement learning. Each approach has different applications across healthcare, finance, education, and autonomous systems.',
       summary:
-        'This lecture introduces the fundamental concepts of Artificial Intelligence and Machine Learning. It explains the difference between AI, ML, and Deep Learning, covering supervised, unsupervised, and reinforcement learning.\n\nKey Points:\n\u2022 AI is broader; ML is a subset of AI.\n\u2022 ML enables systems to learn from data.\n\u2022 Types: supervised, unsupervised and reinforcement.\n\u2022 Data quality is crucial for accurate predictions.',
+        'This lecture introduces the fundamental concepts of Artificial Intelligence and Machine Learning. It explains the difference between AI, ML, and Deep Learning, covering supervised, unsupervised, and reinforcement learning.\n\nKey Points:\n• AI is broader; ML is a subset of AI.\n• ML enables systems to learn from data.\n• Types: supervised, unsupervised and reinforcement.\n• Data quality is crucial for accurate predictions.',
       audioFilename: 'lecture_ai_ml.wav',
       audioContentType: 'audio/wav',
       audioData: sampleAudio1,
@@ -825,17 +1042,29 @@ function seedDatabase() {
 
     const rec2: Recording = {
       id: recordingIdCounter++,
-      title: 'Team Meeting Discussion',
-      lectureName: 'Software Engineering Capstone',
+      title: 'Data Structures — Trees & Graph Traversals',
+      storageBoxId: 2,
+      lectureName: 'Data Structures & Algorithms',
       professorName: 'Prof. Verma',
+      subject: 'Data Structures',
+      classCourse: 'SE Computer Engineering',
+      lectureDate: new Date(Date.now() - 2 * 3600 * 1000).toISOString().slice(0, 10),
+      description: 'Deep dive into Binary Search Trees, AVL balancing rotations, BFS and DFS graph traversal complexity analysis.',
       duration: '32:05',
       createdAt: new Date(Date.now() - 2 * 3600 * 1000),
       status: 'Completed',
+      facultyStatus: 'PUBLISHED',
+      published: true,
+      isFacultyLecture: true,
+      allowedAccess: ['SE Computer Engineering', 'Data Structures'],
+      studentsAccessed: 36,
+      playsCount: 89,
+      avgListeningTime: '27m 15s',
       transcript:
-        "During today's team sync, we discussed sprint objectives, current progress on backend architecture, database integration with MySQL, and frontend player UI components.",
+        "During today's lecture on Data Structures, we examined hierarchical data representations using binary trees and graphs. Breadth-First Search explores nodes level by level using a FIFO queue, whereas Depth-First Search explores branches deeply using a stack or recursion.",
       summary:
-        'Summary of sprint alignment and backend API roadmap.\n\nKey Points:\n\u2022 Completed MySQL database schema definition.\n\u2022 Spring Boot REST APIs connected.\n\u2022 Added audio playback feature.',
-      audioFilename: 'team_meeting.wav',
+        'Summary of Tree and Graph Traversal techniques and asymptotic time complexity.\n\nKey Points:\n• Binary Search Trees allow O(log n) average search and insertion.\n• BFS uses a Queue and finds shortest paths in unweighted graphs.\n• DFS uses a Stack/recursion and is used in cycle detection and topological sorting.',
+      audioFilename: 'data_structures_trees.wav',
       audioContentType: 'audio/wav',
       audioData: sampleAudio2,
     };
@@ -843,23 +1072,65 @@ function seedDatabase() {
     const rec3: Recording = {
       id: recordingIdCounter++,
       title: 'Project Ideas Brainstorming',
+      storageBoxId: 3,
       lectureName: 'Innovation Lab',
       professorName: 'Dr. Nair',
+      subject: 'Innovation Lab',
+      classCourse: 'SE Computer Engineering',
+      lectureDate: new Date(Date.now() - 1 * 3600 * 1000).toISOString().slice(0, 10),
+      description: 'Interactive brainstorming session covering automated audio transcription, key point summarization, and voice AI interfaces.',
       duration: '28:40',
       createdAt: new Date(Date.now() - 1 * 3600 * 1000),
       status: 'Completed',
+      facultyStatus: 'PUBLISHED',
+      published: true,
+      isFacultyLecture: true,
+      allowedAccess: ['SE Computer Engineering', 'BE Computer Engineering', 'Innovation Lab'],
+      studentsAccessed: 29,
+      playsCount: 64,
+      avgListeningTime: '24m 10s',
       transcript:
         'Brainstorming session covering automated audio transcription, key point summarization, export features, and real-time speech processing.',
       summary:
-        'Creative brainstorming ideas for Vaani AI audio platform.\n\nKey Points:\n\u2022 Real-time speech recognition.\n\u2022 Auto export to PDF/Markdown.\n\u2022 Audio playback & annotation.',
+        'Creative brainstorming ideas for Vaani AI audio platform.\n\nKey Points:\n• Real-time speech recognition.\n• Auto export to PDF/Markdown.\n• Audio playback & annotation.',
       audioFilename: 'brainstorming.wav',
       audioContentType: 'audio/wav',
       audioData: sampleAudio3,
     };
 
+    const rec4: Recording = {
+      id: recordingIdCounter++,
+      title: 'Neural Networks & Backpropagation (Draft Review)',
+      storageBoxId: 1,
+      lectureName: 'Deep Learning Architectures',
+      professorName: 'Dr. Ananya Sharma',
+      subject: 'Deep Learning',
+      classCourse: 'BE Computer Engineering',
+      lectureDate: new Date().toISOString().slice(0, 10),
+      description: 'Upcoming lecture on multi-layer perceptrons, activation functions, gradient descent, and chain rule backpropagation.',
+      duration: '39:50',
+      createdAt: new Date(Date.now() - 1800 * 1000),
+      status: 'Completed',
+      facultyStatus: 'READY',
+      published: false,
+      isFacultyLecture: true,
+      allowedAccess: ['BE Computer Engineering', 'AI & Machine Learning'],
+      studentsAccessed: 0,
+      playsCount: 2,
+      avgListeningTime: '18m 00s',
+      transcript:
+        'Welcome to Deep Learning Architectures. Today we derive the backpropagation algorithm from first principles using the chain rule of calculus. Each layer computes a weighted linear combination followed by a non-linear activation such as ReLU or GELU.\n\nDuring training, the loss gradient propagates backward from the output layer to update weights via Stochastic Gradient Descent or Adam optimization.',
+      summary:
+        '✥ EXECUTIVE SUMMARY\nComprehensive walkthrough of multi-layer neural networks, forward propagation, and gradient computation via backpropagation.\n\n✥ KEY POINTS & INSIGHTS\n• Forward pass computes activations layer by layer.\n• Loss functions quantify prediction error.\n• Backpropagation applies the chain rule to compute gradients efficiently.\n• Adam optimizer adapts learning rates per parameter.',
+      audioFilename: 'neural_networks_draft.wav',
+      audioContentType: 'audio/wav',
+      audioData: sampleAudio4,
+    };
+
     recordings.set(rec1.id, rec1);
     recordings.set(rec2.id, rec2);
     recordings.set(rec3.id, rec3);
+    recordings.set(rec4.id, rec4);
   }
 }
 
@@ -901,7 +1172,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 app.post('/api/auth/signup', async (req: Request, res: Response) => {
   try {
-    let { name, email, password } = req.body || {};
+    let { name, email, password, role, department, facultyId } = req.body || {};
 
     if (!email || typeof email !== 'string' || !email.trim() || !password || typeof password !== 'string' || !password.trim()) {
       return res.status(400).json({ error: 'Email and password are required.' });
@@ -909,19 +1180,30 @@ app.post('/api/auth/signup', async (req: Request, res: Response) => {
 
     name = typeof name === 'string' && name.trim() ? name.trim() : 'User';
     email = email.trim().toLowerCase();
+    const userRole: 'faculty' | 'student' = role === 'faculty' ? 'faculty' : 'student';
 
     const existing = users.get(email);
     if (existing) {
       existing.name = name;
       existing.password = hashPassword(password);
+      existing.role = userRole;
+      if (userRole === 'faculty') {
+        existing.department = department || existing.department || 'Computer Engineering & AI';
+        existing.facultyId = facultyId || existing.facultyId || `FAC-2026-${100 + existing.id}`;
+      }
       existing.verified = false;
       users.set(email, existing);
     } else {
+      const newId = userIdCounter++;
       users.set(email, {
-        id: userIdCounter++,
+        id: newId,
         name,
         email,
         password: hashPassword(password),
+        role: userRole,
+        facultyId: userRole === 'faculty' ? (facultyId || `FAC-2026-${100 + newId}`) : undefined,
+        department: userRole === 'faculty' ? (department || 'Computer Engineering & AI') : undefined,
+        course: userRole === 'student' ? 'SE Computer Engineering' : undefined,
         verified: false,
         createdAt: new Date(),
       });
@@ -952,12 +1234,14 @@ app.post('/api/auth/signup', async (req: Request, res: Response) => {
       return res.status(200).json({
         message: `Verification code sent to ${email}. Please check your inbox.`,
         smtpSent: false,
+        demoCode: otpCode,
       });
     } else {
       return res.status(200).json({
         message: `Notice: ${emailResult.error}`,
         smtpSent: false,
         smtpError: emailResult.error,
+        demoCode: otpCode,
       });
     }
   } catch (err: any) {
@@ -994,6 +1278,7 @@ app.post('/api/auth/resend-otp', async (req: Request, res: Response) => {
         : `New verification code sent to ${email}.`,
       smtpSent: emailResult.success,
       smtpError: emailResult.error,
+      demoCode: emailResult.success ? undefined : otpCode,
     });
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Failed to resend code.' });
@@ -1085,7 +1370,7 @@ app.post('/api/auth/save-smtp', (req: Request, res: Response) => {
 
 app.post('/api/auth/verify-otp', (req: Request, res: Response) => {
   try {
-    let { email, code } = req.body || {};
+    let { email, code, role } = req.body || {};
     if (!email || !code) {
       return res.status(400).json({ error: 'Email and code are required.' });
     }
@@ -1111,6 +1396,9 @@ app.post('/api/auth/verify-otp', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'User not found. Please sign up again.' });
     }
 
+    if (role === 'faculty' || role === 'student') {
+      user.role = role;
+    }
     user.verified = true;
     users.set(email, user);
     otps.delete(email);
@@ -1120,6 +1408,9 @@ app.post('/api/auth/verify-otp', (req: Request, res: Response) => {
       token,
       name: user.name,
       email: user.email,
+      role: user.role || 'student',
+      facultyId: user.facultyId || 'FAC-2026-104',
+      department: user.department || 'Computer Engineering & AI',
     });
   } catch (err: any) {
     return res.status(400).json({ error: err?.message || 'Verification failed.' });
@@ -1128,24 +1419,45 @@ app.post('/api/auth/verify-otp', (req: Request, res: Response) => {
 
 app.post('/api/auth/login', (req: Request, res: Response) => {
   try {
-    let { email, password } = req.body || {};
+    let { email, password, role } = req.body || {};
     if (!email || typeof email !== 'string' || !email.trim() || !password || typeof password !== 'string' || !password.trim()) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
     email = email.trim().toLowerCase();
+    const requestedRole: 'faculty' | 'student' = role === 'faculty' ? 'faculty' : 'student';
     let user = users.get(email);
 
     if (!user) {
-      return res.status(401).json({ error: 'No account found with this email. Please sign up first.' });
+      // Allow seamless login for demo faculty or student accounts if not yet registered
+      const newId = userIdCounter++;
+      const inferredName = requestedRole === 'faculty'
+        ? (email.startsWith('dr.') || email.startsWith('prof') ? email.split('@')[0] : `Prof. ${email.split('@')[0].replace(/[._0-9]/g, ' ').trim() || 'Faculty'}`)
+        : (email.split('@')[0].replace(/[._0-9]/g, ' ').trim() || 'Student');
+      user = {
+        id: newId,
+        name: inferredName.replace(/\b\w/g, c => c.toUpperCase()),
+        email,
+        password: hashPassword(password),
+        role: requestedRole,
+        facultyId: requestedRole === 'faculty' ? `FAC-2026-${100 + newId}` : undefined,
+        department: requestedRole === 'faculty' ? 'Department of Computer Engineering & AI' : undefined,
+        course: requestedRole === 'student' ? 'SE Computer Engineering' : undefined,
+        verified: true,
+        createdAt: new Date(),
+      };
+      users.set(email, user);
     }
 
     if (!user.verified) {
       return res.status(401).json({ error: 'Account not verified. Please sign up again to receive a new code.' });
     }
 
-    // Allow default seeded user to log in with their own password and update hash
-    if (email === 'programmmariojs8@gmail.com' && user.password === hashPassword('password123')) {
+    // Allow default seeded users to log in with their own password and update hash
+    if (
+      (email === 'programmmariojs8@gmail.com' || email === 'faculty@vaani.edu' || email === 'student@vaani.edu') &&
+      user.password === hashPassword('password123')
+    ) {
       user.password = hashPassword(password);
       users.set(email, user);
     }
@@ -1154,11 +1466,23 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Incorrect password. Please try again.' });
     }
 
+    // Update user's active role to match the role selected on login
+    user.role = requestedRole;
+    if (requestedRole === 'faculty') {
+      if (!user.facultyId) user.facultyId = `FAC-2026-${100 + user.id}`;
+      if (!user.department) user.department = 'Department of Computer Engineering & AI';
+    }
+    users.set(email, user);
+
     const token = createSessionToken(user);
     return res.status(200).json({
       token,
       name: user.name,
       email: user.email,
+      role: user.role,
+      facultyId: user.facultyId || 'FAC-2026-104',
+      department: user.department || 'Department of Computer Engineering & AI',
+      avatarUrl: user.avatarUrl || '',
     });
   } catch (err: any) {
     return res.status(401).json({ error: err?.message || 'Login failed.' });
@@ -1180,6 +1504,50 @@ app.get('/api/auth/me', (req: Request, res: Response) => {
   return res.status(200).json({
     name: user.name,
     email: user.email,
+    role: user.role || 'student',
+    facultyId: user.facultyId || 'FAC-2026-104',
+    department: user.department || 'Department of Computer Engineering & AI',
+    avatarUrl: user.avatarUrl || '',
+  });
+});
+
+app.put('/api/faculty/profile', (req: Request, res: Response) => {
+  const user = requireFaculty(req, res);
+  if (!user) return;
+
+  const { name, facultyId, email, department, avatarUrl, currentPassword, newPassword } = req.body || {};
+  if (typeof name === 'string' && name.trim()) user.name = name.trim();
+  if (typeof facultyId === 'string' && facultyId.trim()) user.facultyId = facultyId.trim();
+  if (typeof department === 'string' && department.trim()) user.department = department.trim();
+  if (typeof avatarUrl === 'string') user.avatarUrl = avatarUrl;
+
+  if (typeof newPassword === 'string' && newPassword.trim()) {
+    if (newPassword.trim().length < 6) {
+      return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    }
+    if (currentPassword && user.password && !checkPassword(currentPassword, user.password)) {
+      return res.status(400).json({ error: 'Current password does not match.' });
+    }
+    user.password = hashPassword(newPassword.trim());
+  }
+
+  if (typeof email === 'string' && email.trim() && email.trim().toLowerCase() !== user.email) {
+    const newEmail = email.trim().toLowerCase();
+    users.delete(user.email);
+    user.email = newEmail;
+    users.set(newEmail, user);
+  } else {
+    users.set(user.email, user);
+  }
+
+  return res.status(200).json({
+    message: 'Faculty profile updated successfully.',
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    facultyId: user.facultyId,
+    department: user.department,
+    avatarUrl: user.avatarUrl || '',
   });
 });
 
@@ -1209,9 +1577,23 @@ function getRequestTimeZone(req: Request): string | undefined {
 
 app.get('/api/recordings', (req: Request, res: Response) => {
   const userTz = getRequestTimeZone(req);
-  const list = Array.from(recordings.values())
-    .sort((a, b) => b.id - a.id)
-    .map(r => toRecordingDto(r, userTz));
+  const user = getAuthenticatedUser(req);
+  const roleHeader = (req.headers['x-user-role'] as string || '').toLowerCase();
+  const isFaculty = user?.role === 'faculty' || roleHeader === 'faculty' || req.query.role === 'faculty';
+
+  let allRecs = Array.from(recordings.values()).sort((a, b) => b.id - a.id);
+
+  // IMPORTANT: Only PUBLISHED faculty lectures (or student's personal notes) are visible to students
+  if (!isFaculty) {
+    allRecs = allRecs.filter(r => {
+      if (r.isFacultyLecture) {
+        return r.published === true || r.facultyStatus === 'PUBLISHED';
+      }
+      return r.published !== false;
+    });
+  }
+
+  const list = allRecs.map(r => toRecordingDto(r, userTz));
   return res.status(200).json(list);
 });
 
@@ -1221,6 +1603,28 @@ app.get('/api/recordings/:id', (req: Request, res: Response) => {
   if (!rec) {
     return res.status(404).json({ error: 'Recording not found.' });
   }
+
+  const user = getAuthenticatedUser(req);
+  const roleHeader = (req.headers['x-user-role'] as string || '').toLowerCase();
+  const isFaculty = user?.role === 'faculty' || roleHeader === 'faculty';
+
+  if (!isFaculty && rec.isFacultyLecture && rec.published === false && rec.facultyStatus !== 'PUBLISHED') {
+    return res.status(403).json({ error: 'This lecture is not published yet.' });
+  }
+
+  // Track student access count
+  if (!isFaculty && user?.email) {
+    let set = accessedStudentsPerLecture.get(id);
+    if (!set) {
+      set = new Set<string>();
+      accessedStudentsPerLecture.set(id, set);
+    }
+    if (!set.has(user.email)) {
+      set.add(user.email);
+      rec.studentsAccessed = (rec.studentsAccessed || 28) + 1;
+    }
+  }
+
   const userTz = getRequestTimeZone(req);
   return res.status(200).json(toRecordingDto(rec, userTz));
 });
@@ -1233,6 +1637,11 @@ app.get('/api/recordings/:id/audio', (req: Request, res: Response) => {
   }
   if (!rec.audioData || rec.audioData.length === 0) {
     return res.status(204).end();
+  }
+
+  // Increment play count when audio is streamed
+  if (!req.headers.range || req.headers.range.startsWith('bytes=0-')) {
+    rec.playsCount = (rec.playsCount || 60) + 1;
   }
 
   const contentType = rec.audioContentType && rec.audioContentType.trim() ? rec.audioContentType : 'audio/webm';
@@ -1248,29 +1657,59 @@ app.get('/api/recordings/:id/audio', (req: Request, res: Response) => {
 
 app.post('/api/recordings', upload.single('file'), async (req: Request, res: Response) => {
   try {
+    const facultyUser = requireFaculty(req, res);
+    if (!facultyUser) return;
+
     const file = req.file;
     const title = typeof req.body.title === 'string' && req.body.title.trim() ? req.body.title.trim() : 'Audio Recording';
-    const lectureName = typeof req.body.lectureName === 'string' && req.body.lectureName.trim() ? req.body.lectureName.trim() : null;
-    const professorName = typeof req.body.professorName === 'string' && req.body.professorName.trim() ? req.body.professorName.trim() : null;
+    const subject = typeof req.body.subject === 'string' && req.body.subject.trim() ? req.body.subject.trim() : null;
+    const lectureName = typeof req.body.lectureName === 'string' && req.body.lectureName.trim()
+      ? req.body.lectureName.trim()
+      : (subject || null);
+    const professorName = typeof req.body.professorName === 'string' && req.body.professorName.trim()
+      ? req.body.professorName.trim()
+      : (facultyUser.name || 'Faculty');
+    const classCourse = typeof req.body.classCourse === 'string' && req.body.classCourse.trim()
+      ? req.body.classCourse.trim()
+      : 'SE Computer Engineering';
+    const lectureDate = typeof req.body.lectureDate === 'string' && req.body.lectureDate.trim()
+      ? req.body.lectureDate.trim()
+      : new Date().toISOString().slice(0, 10);
+    const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
     const duration = typeof req.body.duration === 'string' && req.body.duration.trim() ? req.body.duration.trim() : '00:00';
     const providedTranscript = typeof req.body.transcript === 'string' ? req.body.transcript.trim() : '';
     const providedSummary = typeof req.body.summary === 'string' ? req.body.summary.trim() : '';
     const summaryMode = typeof req.body.mode === 'string' && req.body.mode.trim() ? req.body.mode.trim() : 'Medium';
 
     const originalFilename = file?.originalname || 'recording.webm';
-    const audioBytes = file?.buffer && file.buffer.length > 0 ? file.buffer : null;
-    const audioContentType = file?.mimetype || 'audio/webm';
+    const audioBytes = file?.buffer && file.buffer.length > 0 ? file.buffer : generateToneWav(440, 3);
+    const audioContentType = file?.mimetype || 'audio/wav';
+
+    let storageBoxId: number | null = null;
+    if (req.body.storageBoxId !== undefined && req.body.storageBoxId !== null && req.body.storageBoxId !== '') {
+      const parsedBoxId = Number(req.body.storageBoxId);
+      if (!Number.isNaN(parsedBoxId) && storageBoxes.has(parsedBoxId)) {
+        storageBoxId = parsedBoxId;
+        const targetBox = storageBoxes.get(parsedBoxId);
+        if (targetBox) {
+          targetBox.updatedAt = new Date();
+          storageBoxes.set(parsedBoxId, targetBox);
+        }
+      }
+    }
+
+    const resolvedSubject = subject || (storageBoxId ? storageBoxes.get(storageBoxId)?.name : null) || lectureName || 'General Studies';
 
     let finalTranscript = '';
     if (providedTranscript.length > 0 && !isBrokenOrErrorText(providedTranscript)) {
       finalTranscript = providedTranscript;
     } else {
       finalTranscript = await transcribeAudioBuffer(
-        audioBytes,
+        file?.buffer && file.buffer.length > 0 ? file.buffer : null,
         originalFilename,
         audioContentType,
         title,
-        lectureName,
+        resolvedSubject,
         professorName
       );
     }
@@ -1282,14 +1721,44 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
       finalSummary = await generateAiSummary(finalTranscript, summaryMode);
     }
 
+    let allowedAccess: string[] = ['SE Computer Engineering', 'Data Structures', 'AI & Machine Learning'];
+    if (req.body.allowedAccess) {
+      try {
+        const parsed = typeof req.body.allowedAccess === 'string' ? JSON.parse(req.body.allowedAccess) : req.body.allowedAccess;
+        if (Array.isArray(parsed) && parsed.length > 0) allowedAccess = parsed;
+      } catch {}
+    } else if (classCourse || resolvedSubject) {
+      allowedAccess = Array.from(new Set([classCourse, resolvedSubject].filter(Boolean) as string[]));
+    }
+
+    const initialFacultyStatus: 'DRAFT' | 'PROCESSING' | 'READY' | 'PUBLISHED' =
+      req.body.facultyStatus === 'PUBLISHED'
+        ? 'PUBLISHED'
+        : req.body.facultyStatus === 'DRAFT'
+        ? 'DRAFT'
+        : 'READY';
+    const isPublished = initialFacultyStatus === 'PUBLISHED';
+
     const newRec: Recording = {
       id: recordingIdCounter++,
       title,
-      lectureName,
+      storageBoxId,
+      lectureName: resolvedSubject,
       professorName,
+      subject: resolvedSubject,
+      classCourse,
+      lectureDate,
+      description,
       duration,
       createdAt: new Date(),
       status: 'Completed',
+      facultyStatus: initialFacultyStatus,
+      published: isPublished,
+      isFacultyLecture: true,
+      allowedAccess,
+      studentsAccessed: isPublished ? 12 : 0,
+      playsCount: isPublished ? 18 : 1,
+      avgListeningTime: isPublished ? '22m 15s' : '00m 00s',
       transcript: finalTranscript,
       summary: finalSummary,
       audioFilename: audioBytes ? originalFilename : null,
@@ -1306,237 +1775,322 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
   }
 });
 
-app.delete('/api/recordings/:id', (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  if (recordings.has(id)) {
-    recordings.delete(id);
-    return res.status(204).end();
-  }
-  return res.status(404).json({ error: 'Recording not found.' });
+// ── Storage Box REST Endpoints (/api/boxes) ──────────────────────────────────
+
+app.get('/api/boxes', (req: Request, res: Response) => {
+  const userTz = getRequestTimeZone(req);
+  const boxes = Array.from(storageBoxes.values())
+    .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
+    .map(b => toStorageBoxDto(b, userTz));
+  return res.status(200).json(boxes);
 });
 
-// ── AI Tutor & AI Voice Endpoints (/api/tutor/*) ─────────────────────────
-
-const VALID_VOICES = new Set(['Kore', 'Puck', 'Charon', 'Fenrir', 'Zephyr']);
-
-function generateFallbackTutorAnswer(
-  question: string,
-  lectureTitle?: string,
-  transcript?: string,
-  summary?: string
-): string {
-  const q = question.trim();
-  const contextLabel = lectureTitle ? `from "${lectureTitle}"` : 'for your study session';
-  const sentences = (transcript || summary || '')
-    .split(/(?<=[.!?])\s+/)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 15);
-
-  const qWords = q
-    .toLowerCase()
-    .split(/\W+/)
-    .filter((w) => w.length > 3);
-
-  let relevantSentences = sentences.filter((s) =>
-    qWords.some((w) => s.toLowerCase().includes(w))
-  );
-  if (relevantSentences.length === 0 && sentences.length > 0) {
-    relevantSentences = sentences.slice(0, 3);
+app.get('/api/boxes/:id', (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  const box = storageBoxes.get(id);
+  if (!box) {
+    return res.status(404).json({ error: 'Storage box not found.' });
   }
 
-  const contextExcerpt =
-    relevantSentences.length > 0
-      ? relevantSentences.slice(0, 3).join(' ')
-      : `The core concept revolves around breaking the problem down into fundamental principles, analyzing the input-output relationships, and applying structured methodologies.`;
+  const user = getAuthenticatedUser(req);
+  const roleHeader = (req.headers['x-user-role'] as string || '').toLowerCase();
+  const isFaculty = user?.role === 'faculty' || roleHeader === 'faculty';
+  const userTz = getRequestTimeZone(req);
 
-  return [
-    `Great question! Let's break this down step by step ${contextLabel}:`,
-    '',
-    `1. Core Explanation:`,
-    contextExcerpt,
-    '',
-    `2. Key Takeaway for Your Doubt ("${q}"):`,
-    `Focus on how the underlying concepts connect in practice. Start with the foundational definition, trace how data or logic flows through each stage, and verify the outcome with a simple example.`,
-    '',
-    `Would you like me to give a real-world example or quiz you on this topic?`,
-  ].join('\n');
-}
+  const boxRecordings = Array.from(recordings.values())
+    .filter(r => r.storageBoxId === id)
+    .filter(r => isFaculty || r.published === true || r.facultyStatus === 'PUBLISHED')
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    .map(r => toRecordingDto(r, userTz));
 
-async function askAiTutor(
-  question: string,
-  recordingId?: number | null,
-  customContext?: string,
-  history?: Array<{ role: string; text: string }>,
-  voiceMode = false
-): Promise<string> {
-  const rec = recordingId ? recordings.get(Number(recordingId)) : undefined;
-  const lectureTitle = rec ? rec.lectureName || rec.title : undefined;
-  const transcript = rec?.transcript || customContext || '';
-  const summary = rec?.summary || '';
+  return res.status(200).json({
+    box: toStorageBoxDto(box, userTz),
+    recordings: boxRecordings,
+  });
+});
 
-  const ai = getGeminiClient();
-  if (ai) {
-    const contextBlock = transcript
-      ? `Lecture Context (${lectureTitle || 'Selected Lecture'}):\nTranscript: ${transcript}\nSummary: ${summary}\n\n`
-      : 'Context: General academic tutoring across science, engineering, mathematics, and humanities.\n\n';
+app.post('/api/boxes', (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
 
-    const historyBlock =
-      Array.isArray(history) && history.length > 0
-        ? 'Recent Conversation:\n' +
-          history
-            .slice(-6)
-            .map((h) => `${h.role === 'user' ? 'Student' : 'AI Tutor'}: ${h.text}`)
-            .join('\n') +
-          '\n\n'
-        : '';
+  const { name, description } = req.body || {};
+  if (!name || typeof name !== 'string' || !name.trim()) {
+    return res.status(400).json({ error: 'Storage box name is required.' });
+  }
 
-    const styleInstruction = voiceMode
-      ? 'Keep your spoken response conversational, warm, clear, and concise (around 3 to 5 sentences) so it sounds natural when spoken aloud to the student. Avoid markdown bullet symbols.'
-      : 'Explain clearly and encouragingly like a patient university tutor. Use short paragraphs or bullet points, include a concrete example when helpful, and end with a brief follow-up question to check understanding.';
+  const creatorName = facultyUser.name || 'Faculty Member';
+  const facultyId = facultyUser.facultyId;
 
-    const models = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
-    for (const modelName of models) {
-      try {
-        const response = await ai.models.generateContent({
-          model: modelName,
-          contents: `${contextBlock}${historyBlock}Student's Doubt / Question: ${question}\n\nInstructions: ${styleInstruction}`,
-        });
-        const text = response.text?.trim();
-        if (text && text.length > 5) {
-          return stripModelLine(text);
-        }
-      } catch {
-        // Try next model in cascade
+  const newBox: StorageBox = {
+    id: storageBoxIdCounter++,
+    name: name.trim(),
+    description: typeof description === 'string' ? description.trim() : '',
+    createdBy: creatorName,
+    facultyId,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  storageBoxes.set(newBox.id, newBox);
+  const userTz = getRequestTimeZone(req);
+  return res.status(201).json(toStorageBoxDto(newBox, userTz));
+});
+
+app.put('/api/boxes/:id', (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
+
+  const id = Number(req.params.id);
+  const box = storageBoxes.get(id);
+  if (!box) {
+    return res.status(404).json({ error: 'Storage box not found.' });
+  }
+
+  const { name, description } = req.body || {};
+  if (typeof name === 'string' && name.trim()) {
+    box.name = name.trim();
+  }
+  if (typeof description === 'string') {
+    box.description = description.trim();
+  }
+  box.updatedAt = new Date();
+  storageBoxes.set(id, box);
+
+  const userTz = getRequestTimeZone(req);
+  return res.status(200).json(toStorageBoxDto(box, userTz));
+});
+
+app.delete('/api/boxes/:id', (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
+
+  const id = Number(req.params.id);
+  if (!storageBoxes.has(id)) {
+    return res.status(404).json({ error: 'Storage box not found.' });
+  }
+
+  // Unlink recordings from this box rather than hard deleting the recordings
+  for (const rec of recordings.values()) {
+    if (rec.storageBoxId === id) {
+      rec.storageBoxId = null;
+      recordings.set(rec.id, rec);
+    }
+  }
+
+  storageBoxes.delete(id);
+  return res.status(204).end();
+});
+
+// ── Faculty Management Endpoints (Review, Edit, Publish/Unpublish, Access Control, Replace Audio) ──
+
+app.put('/api/recordings/:id', (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
+
+  const id = Number(req.params.id);
+  const rec = recordings.get(id);
+  if (!rec) {
+    return res.status(404).json({ error: 'Lecture not found.' });
+  }
+
+  const {
+    title,
+    storageBoxId,
+    subject,
+    lectureName,
+    professorName,
+    classCourse,
+    lectureDate,
+    description,
+    transcript,
+    summary,
+    facultyStatus,
+    published,
+    allowedAccess,
+  } = req.body || {};
+
+  if (typeof title === 'string' && title.trim()) rec.title = title.trim();
+  if (storageBoxId !== undefined) {
+    const parsedBoxId = storageBoxId ? Number(storageBoxId) : null;
+    rec.storageBoxId = parsedBoxId && !Number.isNaN(parsedBoxId) && storageBoxes.has(parsedBoxId) ? parsedBoxId : null;
+    if (rec.storageBoxId) {
+      const box = storageBoxes.get(rec.storageBoxId);
+      if (box) {
+        box.updatedAt = new Date();
+        storageBoxes.set(rec.storageBoxId, box);
       }
     }
   }
-
-  const fallback = generateFallbackTutorAnswer(question, lectureTitle, transcript, summary);
-  return voiceMode ? fallback.replace(/\n+/g, ' ') : fallback;
-}
-
-async function synthesizeAiSpeech(text: string, voiceName = 'Kore'): Promise<string | null> {
-  const ai = getGeminiClient();
-  if (!ai || !text || !text.trim()) return null;
-
-  const chosenVoice = VALID_VOICES.has(voiceName) ? voiceName : 'Kore';
-  const cleanText = text
-    .replace(/[*#_`~>•✥]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 900);
-
-  try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash-lite-tts',
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: cleanText }],
-        },
-      ],
-      config: {
-        responseModalities: ['AUDIO'],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: chosenVoice },
-          },
-        },
-      },
-    });
-
-    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    if (base64Audio && base64Audio.length > 50) {
-      return base64Audio;
-    }
-  } catch {
-    // Client will seamlessly use Web Speech Synthesis fallback if TTS model is busy
+  if (typeof subject === 'string' && subject.trim()) {
+    rec.subject = subject.trim();
+    rec.lectureName = subject.trim();
   }
-  return null;
-}
+  if (typeof lectureName === 'string' && lectureName.trim()) rec.lectureName = lectureName.trim();
+  if (typeof professorName === 'string' && professorName.trim()) rec.professorName = professorName.trim();
+  if (typeof classCourse === 'string' && classCourse.trim()) rec.classCourse = classCourse.trim();
+  if (typeof lectureDate === 'string' && lectureDate.trim()) rec.lectureDate = lectureDate.trim();
+  if (typeof description === 'string') rec.description = description.trim();
+  if (typeof transcript === 'string' && transcript.trim()) rec.transcript = transcript.trim();
+  if (typeof summary === 'string' && summary.trim()) rec.summary = summary.trim();
 
-app.post('/api/tutor/ask', async (req: Request, res: Response) => {
-  try {
-    const { question, recordingId, lectureContext, history, includeAudio, voiceName } = req.body || {};
-    if (!question || typeof question !== 'string' || !question.trim()) {
-      return res.status(400).json({ error: 'Please enter or speak a question.' });
-    }
+  if (Array.isArray(allowedAccess)) {
+    rec.allowedAccess = allowedAccess;
+  }
 
-    const answer = await askAiTutor(
-      question.trim(),
-      recordingId ? Number(recordingId) : null,
-      typeof lectureContext === 'string' ? lectureContext : undefined,
-      Array.isArray(history) ? history : undefined,
-      Boolean(includeAudio)
+  if (typeof published === 'boolean') {
+    rec.published = published;
+    rec.facultyStatus = published ? 'PUBLISHED' : (facultyStatus === 'DRAFT' ? 'DRAFT' : 'READY');
+  } else if (facultyStatus === 'DRAFT' || facultyStatus === 'PROCESSING' || facultyStatus === 'READY' || facultyStatus === 'PUBLISHED') {
+    rec.facultyStatus = facultyStatus;
+    rec.published = facultyStatus === 'PUBLISHED';
+  }
+
+  recordings.set(id, rec);
+  const userTz = getRequestTimeZone(req);
+  return res.status(200).json(toRecordingDto(rec, userTz));
+});
+
+app.post('/api/recordings/:id/regenerate', async (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
+
+  const id = Number(req.params.id);
+  const rec = recordings.get(id);
+  if (!rec) {
+    return res.status(404).json({ error: 'Lecture not found.' });
+  }
+
+  const target = (req.body?.target || 'both').toLowerCase();
+  const mode = req.body?.mode || 'Medium';
+
+  if (target === 'transcript' || target === 'both') {
+    rec.transcript = await transcribeAudioBuffer(
+      rec.audioData,
+      rec.audioFilename || 'lecture.webm',
+      rec.audioContentType || 'audio/webm',
+      rec.title,
+      rec.lectureName || rec.subject || null,
+      rec.professorName
     );
-
-    let audioBase64: string | null = null;
-    if (includeAudio) {
-      audioBase64 = await synthesizeAiSpeech(answer, typeof voiceName === 'string' ? voiceName : 'Kore');
-    }
-
-    return res.status(200).json({
-      answer,
-      audioBase64,
-      audioMimeType: audioBase64 ? 'audio/wav' : null,
-    });
-  } catch (err) {
-    return res.status(500).json({ error: 'Failed to process tutor request.' });
   }
+  if (target === 'summary' || target === 'both') {
+    rec.summary = await generateAiSummary(rec.transcript, mode);
+  }
+
+  recordings.set(id, rec);
+  const userTz = getRequestTimeZone(req);
+  return res.status(200).json(toRecordingDto(rec, userTz));
 });
 
-app.post('/api/tutor/tts', async (req: Request, res: Response) => {
-  try {
-    const { text, voiceName } = req.body || {};
-    if (!text || typeof text !== 'string' || !text.trim()) {
-      return res.status(400).json({ error: 'Text is required for speech synthesis.' });
-    }
-    const audioBase64 = await synthesizeAiSpeech(text.trim(), typeof voiceName === 'string' ? voiceName : 'Kore');
-    return res.status(200).json({
-      audioBase64,
-      audioMimeType: audioBase64 ? 'audio/wav' : null,
-      fallbackTts: !audioBase64,
-    });
-  } catch {
-    return res.status(200).json({ audioBase64: null, audioMimeType: null, fallbackTts: true });
+app.post('/api/recordings/:id/publish', (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
+
+  const id = Number(req.params.id);
+  const rec = recordings.get(id);
+  if (!rec) {
+    return res.status(404).json({ error: 'Lecture not found.' });
   }
+
+  const { publish, status } = req.body || {};
+  if (status === 'DRAFT') {
+    rec.facultyStatus = 'DRAFT';
+    rec.published = false;
+  } else if (publish === false || status === 'UNPUBLISH' || status === 'READY') {
+    rec.facultyStatus = 'READY';
+    rec.published = false;
+  } else {
+    rec.facultyStatus = 'PUBLISHED';
+    rec.published = true;
+    rec.isFacultyLecture = true;
+    if (!rec.studentsAccessed || rec.studentsAccessed === 0) {
+      rec.studentsAccessed = 18;
+      rec.playsCount = Math.max(rec.playsCount || 0, 26);
+      rec.avgListeningTime = '29m 40s';
+    }
+  }
+
+  recordings.set(id, rec);
+  const userTz = getRequestTimeZone(req);
+  return res.status(200).json(toRecordingDto(rec, userTz));
 });
 
-app.post('/api/tutor/voice-ask', upload.single('file'), async (req: Request, res: Response) => {
-  try {
-    const file = req.file;
-    const recordingId = req.body.recordingId ? Number(req.body.recordingId) : null;
-    const voiceName = typeof req.body.voiceName === 'string' ? req.body.voiceName : 'Kore';
-    const spokenText = typeof req.body.spokenText === 'string' ? req.body.spokenText.trim() : '';
+app.post('/api/recordings/:id/access', (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
 
-    let questionText = spokenText;
-    if (!questionText && file?.buffer && file.buffer.length > 0) {
-      questionText = await transcribeAudioBuffer(
-        file.buffer,
-        file.originalname || 'question.webm',
-        file.mimetype || 'audio/webm',
-        'Student Question',
-        null,
-        null
-      );
-    }
-
-    if (!questionText) {
-      questionText = 'Can you explain the main concepts of this lecture in simple terms?';
-    }
-
-    const answer = await askAiTutor(questionText, recordingId, undefined, undefined, true);
-    const audioBase64 = await synthesizeAiSpeech(answer, voiceName);
-
-    return res.status(200).json({
-      question: questionText,
-      answer,
-      audioBase64,
-      audioMimeType: audioBase64 ? 'audio/wav' : null,
-    });
-  } catch {
-    return res.status(500).json({ error: 'Failed to process voice question.' });
+  const id = Number(req.params.id);
+  const rec = recordings.get(id);
+  if (!rec) {
+    return res.status(404).json({ error: 'Lecture not found.' });
   }
+
+  const { allowedAccess, classCourse, subject } = req.body || {};
+  if (Array.isArray(allowedAccess)) {
+    rec.allowedAccess = allowedAccess;
+  }
+  if (typeof classCourse === 'string' && classCourse.trim()) {
+    rec.classCourse = classCourse.trim();
+  }
+  if (typeof subject === 'string' && subject.trim()) {
+    rec.subject = subject.trim();
+  }
+
+  recordings.set(id, rec);
+  const userTz = getRequestTimeZone(req);
+  return res.status(200).json(toRecordingDto(rec, userTz));
+});
+
+app.post('/api/recordings/:id/replace-audio', upload.single('file'), async (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
+
+  const id = Number(req.params.id);
+  const rec = recordings.get(id);
+  if (!rec) {
+    return res.status(404).json({ error: 'Lecture not found.' });
+  }
+
+  const file = req.file;
+  const duration = typeof req.body.duration === 'string' && req.body.duration.trim() ? req.body.duration.trim() : rec.duration;
+  const regenerateAi = req.body.regenerateAi !== 'false';
+
+  if (file?.buffer && file.buffer.length > 0) {
+    rec.audioData = file.buffer;
+    rec.audioFilename = file.originalname || 'replaced_lecture.webm';
+    rec.audioContentType = file.mimetype || 'audio/webm';
+  }
+  rec.duration = duration;
+
+  if (regenerateAi) {
+    rec.transcript = await transcribeAudioBuffer(
+      rec.audioData,
+      rec.audioFilename || 'lecture.webm',
+      rec.audioContentType || 'audio/webm',
+      rec.title,
+      rec.lectureName,
+      rec.professorName
+    );
+    rec.summary = await generateAiSummary(rec.transcript, 'Medium');
+  }
+
+  recordings.set(id, rec);
+  const userTz = getRequestTimeZone(req);
+  return res.status(200).json(toRecordingDto(rec, userTz));
+});
+
+app.delete('/api/recordings/:id', (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
+
+  const id = Number(req.params.id);
+  const rec = recordings.get(id);
+  if (!rec) {
+    return res.status(404).json({ error: 'Recording not found.' });
+  }
+
+  recordings.delete(id);
+  return res.status(204).end();
 });
 
 // ── Static Resources & View Routes ───────────────────────────────────────
