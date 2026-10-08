@@ -8,9 +8,23 @@ function getAuthToken() {
   return localStorage.getItem('vaani_auth_token');
 }
 
+function getUserTimeZone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch (e) {
+    return 'UTC';
+  }
+}
+
 function authHeaders() {
   const token = getAuthToken();
-  return token ? { 'Authorization': 'Bearer ' + token } : {};
+  const headers = {
+    'x-timezone': getUserTimeZone(),
+  };
+  if (token) {
+    headers['Authorization'] = 'Bearer ' + token;
+  }
+  return headers;
 }
 
 function handleAuthError(res) {
@@ -32,10 +46,19 @@ function setUserInfo() {
   const eyebrow = document.querySelector('.eyebrow');
   const settingsName = document.getElementById('settingsName');
   const settingsSelect = document.querySelector('#settings select');
+  const settingsTz = document.getElementById('settingsTimezone');
   if (profileEl) profileEl.textContent = name;
   if (eyebrow) eyebrow.textContent = 'Welcome back, ' + name + '!';
   if (settingsName) settingsName.value = name;
   if (settingsSelect) settingsSelect.value = summaryMode;
+  if (settingsTz) {
+    const tz = getUserTimeZone();
+    const offsetMin = -new Date().getTimezoneOffset();
+    const sign = offsetMin >= 0 ? '+' : '-';
+    const offHr = String(Math.floor(Math.abs(offsetMin) / 60)).padStart(2, '0');
+    const offMn = String(Math.abs(offsetMin) % 60).padStart(2, '0');
+    settingsTz.value = `${tz} (UTC${sign}${offHr}:${offMn}) — Local Time`;
+  }
 }
 setUserInfo();
 
@@ -149,7 +172,21 @@ function loadLocalRecordings() {
 }
 
 function saveLocalRecordings(data) {
-  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    try {
+      // Strip large audioDataUrl payloads if quota exceeded so metadata and transcripts are preserved
+      const safeData = (Array.isArray(data) ? data : []).map(r => {
+        const copy = { ...r };
+        if (copy.audioDataUrl && copy.audioDataUrl.length > 50000) {
+          copy.audioDataUrl = null;
+        }
+        return copy;
+      });
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(safeData));
+    } catch {}
+  }
 }
 
 function showFallbackToast() {
@@ -189,6 +226,9 @@ function page(id) {
   if (id === 'dashboard' || id === 'recordings') {
     loadRecordings();
   }
+  if (id === 'settings') {
+    loadSmtpStatus();
+  }
   document.querySelectorAll('.page').forEach(x => x.classList.toggle('active', x.id === id));
   document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x.dataset.page === id));
   if (id === 'voice' && typeof resizeVoiceCanvas === 'function') {
@@ -199,7 +239,12 @@ function page(id) {
 
 document.addEventListener('click', e => {
   let b = e.target.closest('[data-page]');
-  if (b) page(b.dataset.page);
+  if (b) {
+    page(b.dataset.page);
+    if (b.dataset.page === 'new' && b.dataset.tab === 'upload') {
+      switchToUploadTab();
+    }
+  }
 
   let viewBtn = e.target.closest('.view');
   if (viewBtn) openDetail(viewBtn.dataset.id);
@@ -233,15 +278,60 @@ function escapeHtml(str) {
   return str.replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 }
 
+function formatLocalDisplayDate(val) {
+  if (!val) return 'Just now';
+  let d;
+  if (typeof val === 'number') {
+    d = new Date(val);
+  } else if (val instanceof Date) {
+    d = val;
+  } else if (typeof val === 'string') {
+    const trimmed = val.trim();
+    const parsed = new Date(trimmed);
+    if (!isNaN(parsed.getTime()) && (trimmed.includes('T') || trimmed.endsWith('Z') || trimmed.includes('-'))) {
+      d = parsed;
+    } else {
+      // Check if it's formatted as "02 Oct 2026, 02:00 PM" (from earlier UTC server generation)
+      const match = trimmed.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4}),\s*(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+      if (match) {
+        const [, day, monStr, yr, hrStr, minStr, ampm] = match;
+        const months = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+        const mon = months[monStr.toLowerCase()] ?? 0;
+        let hr = parseInt(hrStr, 10);
+        if (ampm.toUpperCase() === 'PM' && hr < 12) hr += 12;
+        if (ampm.toUpperCase() === 'AM' && hr === 12) hr = 0;
+        d = new Date(Date.UTC(parseInt(yr, 10), mon, parseInt(day, 10), hr, parseInt(minStr, 10)));
+      } else {
+        d = isNaN(parsed.getTime()) ? null : parsed;
+      }
+    }
+  }
+  if (!d || isNaN(d.getTime())) return String(val);
+
+  // Format in user's browser local time
+  const day = String(d.getDate()).padStart(2, '0');
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  if (hours === 0) hours = 12;
+  const hh = String(hours).padStart(2, '0');
+  return `${day} ${month} ${year}, ${hh}:${minutes} ${ampm}`;
+}
+
 function rowHtml(x) {
   const audioSrc = x.audioDataUrl ? x.audioDataUrl : `${API_BASE}/${x.id}/audio`;
+  const displayDate = formatLocalDisplayDate(x.createdAtIso || x.createdAt);
   return `
     <tr>
       <td><b>${escapeHtml(x.title)}</b></td>
       <td>${escapeHtml(x.lectureName || '-')}</td>
       <td>${escapeHtml(x.professorName || '-')}</td>
       <td>${escapeHtml(x.duration || '00:00')}</td>
-      <td>${escapeHtml(x.createdAt || '')}</td>
+      <td>${escapeHtml(displayDate)}</td>
       <td><span class="badge">${escapeHtml(x.status || 'Completed')}</span></td>
       <td>
         ${x.hasAudio
@@ -319,7 +409,7 @@ async function openDetail(id) {
   document.querySelector('#detailDuration').textContent = rec.duration || '00:00';
   document.querySelector('#detailLecture').textContent  = rec.lectureName  || '-';
   document.querySelector('#detailProfessor').textContent = rec.professorName || '-';
-  document.querySelector('#detailCreated').textContent  = rec.createdAt   || 'Just now';
+  document.querySelector('#detailCreated').textContent  = formatLocalDisplayDate(rec.createdAtIso || rec.createdAt);
   document.querySelector('#detailStatus').textContent   = rec.status      || 'Completed';
 
   const isProcessing = rec.status === 'Processing';
@@ -498,8 +588,7 @@ document.querySelector('#reset').onclick = () => {
   statusElem.textContent = 'Recording not started';
   stopBtn.disabled = true;
   stopBtn.classList.add('disabled');
-  document.querySelector('#audio').value = '';
-  document.querySelector('#file').textContent = '';
+  clearSelectedFile();
   document.querySelector('#uploadTranscript').value = '';
   document.querySelector('#lectureNameInput').value = '';
   document.querySelector('#professorNameInput').value = '';
@@ -511,40 +600,162 @@ const uploadTab    = document.querySelector('#uploadTab');
 const recordPane   = document.querySelector('#recordPane');
 const uploadPane   = document.querySelector('#uploadPane');
 const audioFileInput = document.querySelector('#audio');
+const dropZone = document.querySelector('#dropZone');
+const fileInfoBox = document.querySelector('#fileInfoBox');
+const fileInfoName = document.querySelector('#fileInfoName');
+const fileInfoSize = document.querySelector('#fileInfoSize');
+const uploadAudioPreview = document.querySelector('#uploadAudioPreview');
+const removeFileBtn = document.querySelector('#removeFileBtn');
+
+let selectedUploadFile = null;
+
+function switchToUploadTab() {
+  if (recordTab && uploadTab && recordPane && uploadPane) {
+    uploadTab.classList.add('active');
+    recordTab.classList.remove('active');
+    uploadPane.classList.remove('hidden');
+    recordPane.classList.add('hidden');
+  }
+}
+
+function switchToRecordTab() {
+  if (recordTab && uploadTab && recordPane && uploadPane) {
+    recordTab.classList.add('active');
+    uploadTab.classList.remove('active');
+    recordPane.classList.remove('hidden');
+    uploadPane.classList.add('hidden');
+  }
+}
 
 if (recordTab && uploadTab) {
-  recordTab.onclick = () => {
-    recordTab.classList.add('active');    uploadTab.classList.remove('active');
-    recordPane.classList.remove('hidden'); uploadPane.classList.add('hidden');
-  };
-  uploadTab.onclick = () => {
-    uploadTab.classList.add('active');    recordTab.classList.remove('active');
-    uploadPane.classList.remove('hidden'); recordPane.classList.add('hidden');
+  recordTab.onclick = switchToRecordTab;
+  uploadTab.onclick = switchToUploadTab;
+}
+
+function handleSelectedFile(f) {
+  if (!f) return;
+  selectedUploadFile = f;
+  uploadedFileDuration = '';
+
+  const mb = (f.size / (1024 * 1024)).toFixed(2);
+  const sizeText = f.size > 1024 * 1024 ? `${mb} MB` : `${Math.round(f.size / 1024)} KB`;
+
+  if (fileInfoBox && fileInfoName && fileInfoSize) {
+    fileInfoName.textContent = f.name;
+    fileInfoSize.textContent = `${sizeText} • Ready to transcribe`;
+    fileInfoBox.style.display = 'block';
+  }
+
+  const fileLabel = document.querySelector('#file');
+  if (fileLabel) {
+    fileLabel.textContent = `Selected: ${f.name} (${sizeText})`;
+  }
+
+  const lectureInput = document.querySelector('#lectureNameInput');
+  if (lectureInput && !lectureInput.value.trim()) {
+    lectureInput.value = f.name.replace(/\.[^/.]+$/, '');
+  }
+
+  // Audio preview player
+  if (uploadAudioPreview) {
+    try {
+      const previewUrl = URL.createObjectURL(f);
+      uploadAudioPreview.src = previewUrl;
+      uploadAudioPreview.style.display = 'block';
+    } catch {}
+  }
+
+  // Calculate audio duration
+  try {
+    const tempAudio = document.createElement('audio');
+    const objUrl = URL.createObjectURL(f);
+    tempAudio.preload = 'metadata';
+    tempAudio.onloadedmetadata = () => {
+      URL.revokeObjectURL(objUrl);
+      if (isFinite(tempAudio.duration) && tempAudio.duration > 0) {
+        const totalSec = Math.round(tempAudio.duration);
+        const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
+        const s = String(totalSec % 60).padStart(2, '0');
+        uploadedFileDuration = `${m}:${s}`;
+      }
+    };
+    tempAudio.onerror = () => URL.revokeObjectURL(objUrl);
+    tempAudio.src = objUrl;
+  } catch {}
+
+  switchToUploadTab();
+  toast(`Audio file selected: ${f.name}`);
+}
+
+function clearSelectedFile() {
+  selectedUploadFile = null;
+  uploadedFileDuration = '';
+  if (audioFileInput) audioFileInput.value = '';
+  if (fileInfoBox) fileInfoBox.style.display = 'none';
+  if (uploadAudioPreview) {
+    uploadAudioPreview.pause();
+    uploadAudioPreview.src = '';
+    uploadAudioPreview.style.display = 'none';
+  }
+  const fileLabel = document.querySelector('#file');
+  if (fileLabel) fileLabel.textContent = '';
+}
+
+if (removeFileBtn) {
+  removeFileBtn.onclick = e => {
+    e.preventDefault();
+    e.stopPropagation();
+    clearSelectedFile();
+    toast('Audio file removed.');
   };
 }
 
 if (audioFileInput) {
   audioFileInput.onchange = e => {
-    const f = e.target.files[0];
-    document.querySelector('#file').textContent = f ? `Selected: ${f.name}` : '';
-    uploadedFileDuration = '';
-    if (f) {
-      const tempAudio = document.createElement('audio');
-      const objUrl = URL.createObjectURL(f);
-      tempAudio.preload = 'metadata';
-      tempAudio.onloadedmetadata = () => {
-        URL.revokeObjectURL(objUrl);
-        if (isFinite(tempAudio.duration) && tempAudio.duration > 0) {
-          const totalSec = Math.round(tempAudio.duration);
-          const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
-          const s = String(totalSec % 60).padStart(2, '0');
-          uploadedFileDuration = `${m}:${s}`;
-        }
-      };
-      tempAudio.onerror = () => URL.revokeObjectURL(objUrl);
-      tempAudio.src = objUrl;
+    if (e.target.files && e.target.files[0]) {
+      handleSelectedFile(e.target.files[0]);
     }
   };
+}
+
+// Drag & Drop support
+['dragenter', 'dragover'].forEach(evt => {
+  window.addEventListener(evt, e => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  if (dropZone) {
+    dropZone.addEventListener(evt, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.style.borderColor = 'var(--p)';
+      dropZone.style.background = '#f5f0ff';
+    });
+  }
+});
+
+['dragleave', 'drop'].forEach(evt => {
+  window.addEventListener(evt, e => {
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  if (dropZone) {
+    dropZone.addEventListener(evt, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropZone.style.borderColor = '#d7d0ec';
+      dropZone.style.background = '';
+    });
+  }
+});
+
+if (dropZone) {
+  dropZone.addEventListener('drop', e => {
+    const dt = e.dataTransfer;
+    if (dt && dt.files && dt.files.length > 0) {
+      handleSelectedFile(dt.files[0]);
+    }
+  });
 }
 
 // ── Process / Transcribe & Summarize ──────────────────────
@@ -603,9 +814,13 @@ document.querySelector('#process').onclick = async () => {
   if (duration === '00:00') duration = '00:05';
   let transcriptText = '';
 
-  if (uploadTab.classList.contains('active')) {
+  if (uploadTab.classList.contains('active') || selectedUploadFile) {
     transcriptText = document.querySelector('#uploadTranscript').value.trim();
-    if (audioFileInput.files && audioFileInput.files[0]) {
+    if (selectedUploadFile) {
+      fileToSend     = selectedUploadFile;
+      title          = fileToSend.name.replace(/\.[^/.]+$/, '');
+      duration       = uploadedFileDuration || '01:00';
+    } else if (audioFileInput && audioFileInput.files && audioFileInput.files[0]) {
       fileToSend     = audioFileInput.files[0];
       title          = fileToSend.name.replace(/\.[^/.]+$/, '');
       duration       = uploadedFileDuration || '01:00';
@@ -670,6 +885,7 @@ document.querySelector('#process').onclick = async () => {
 
     // Clear recording state after successful upload
     recordedBlob = null;
+    clearSelectedFile();
     liveSpeechTranscript = '';
     chunks = [];
     sec = 0;
@@ -677,8 +893,6 @@ document.querySelector('#process').onclick = async () => {
     document.querySelector('#lectureNameInput').value = '';
     document.querySelector('#professorNameInput').value = '';
     document.querySelector('#uploadTranscript').value = '';
-    document.querySelector('#audio').value = '';
-    document.querySelector('#file').textContent = '';
     recordMsg.textContent = 'Click the microphone to start recording';
     statusElem.textContent = 'Recording not started';
 
@@ -702,7 +916,7 @@ document.querySelector('#process').onclick = async () => {
       : buildFallbackTranscript(tempMeta);
     const summary = buildFallbackSummary(transcript);
     let audioDataUrl = null;
-    if (fileToSend) {
+    if (fileToSend && fileToSend.size < 2 * 1024 * 1024) {
       try { audioDataUrl = await fileToDataUrl(fileToSend); } catch (e) {}
     }
 
@@ -712,7 +926,9 @@ document.querySelector('#process').onclick = async () => {
       lectureName: lectureName || '',
       professorName: professorName || '',
       duration: duration || '00:00',
-      createdAt: new Date().toLocaleString(),
+      createdAt: formatLocalDisplayDate(new Date()),
+      createdAtIso: new Date().toISOString(),
+      timestamp: Date.now(),
       status: 'Completed',
       transcript,
       summary,
@@ -791,6 +1007,125 @@ document.querySelector('#save').onclick = () => {
   setUserInfo();
   toast('Settings saved successfully.');
 };
+
+// ── SMTP Status & Diagnostic Testing ────────────────────────
+async function loadSmtpStatus() {
+  const statusEl = document.getElementById('smtpStatusText');
+  const recipientInput = document.getElementById('smtpTestRecipient');
+  const hostInput = document.getElementById('smtpHostInput');
+  const portInput = document.getElementById('smtpPortInput');
+  const userInput = document.getElementById('smtpUserInput');
+  if (!statusEl) return;
+  try {
+    const res = await fetch('/api/auth/smtp-status');
+    if (res.ok) {
+      const data = await res.json();
+      if (hostInput && !hostInput.value) hostInput.value = data.host || 'smtp.gmail.com';
+      if (portInput && !portInput.value) portInput.value = data.port || 587;
+      if (data.configured) {
+        statusEl.innerHTML = `<span style="color:#17864a; font-weight:700;">● SMTP Active &amp; Ready</span><br>Connected to <b>${escapeHtml(data.host)}:${data.port}</b> as <code>${escapeHtml(data.user || 'configured-user')}</code> (Sender: <i>${escapeHtml(data.from)}</i>). Live verification emails will be delivered to student inboxes.`;
+      } else {
+        statusEl.innerHTML = `<span style="color:#d97706; font-weight:700;">▲ SMTP Not Configured</span><br>Enter your Gmail / SMTP credentials below or set <code>SMTP_USER</code> and <code>SMTP_PASS</code> in environment variables. Currently running in demo mode (verification codes are generated instantly on screen).`;
+      }
+      if (recipientInput && !recipientInput.value) {
+        recipientInput.value = localStorage.getItem('vaani_user_email') || '';
+      }
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Could not retrieve SMTP status from server.';
+  }
+}
+
+const smtpSaveBtn = document.getElementById('smtpSaveBtn');
+if (smtpSaveBtn) {
+  smtpSaveBtn.onclick = async () => {
+    const host = (document.getElementById('smtpHostInput')?.value || '').trim();
+    const port = Number(document.getElementById('smtpPortInput')?.value) || 587;
+    const user = (document.getElementById('smtpUserInput')?.value || '').trim();
+    const pass = (document.getElementById('smtpPassInput')?.value || '').trim();
+
+    if (!user || !pass) {
+      toast('Please enter both SMTP Username/Email and App Password.');
+      return;
+    }
+
+    smtpSaveBtn.disabled = true;
+    smtpSaveBtn.textContent = 'Saving...';
+    try {
+      const res = await fetch('/api/auth/save-smtp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host, port, user, pass, secure: port === 465 }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        toast('SMTP settings saved successfully!');
+        loadSmtpStatus();
+      } else {
+        toast(data.error || 'Failed to save SMTP settings.');
+      }
+    } catch (e) {
+      toast('Error saving SMTP settings.');
+    } finally {
+      smtpSaveBtn.disabled = false;
+      smtpSaveBtn.textContent = 'Save & Activate SMTP';
+    }
+  };
+}
+
+const smtpClearBtn = document.getElementById('smtpClearBtn');
+if (smtpClearBtn) {
+  smtpClearBtn.onclick = async () => {
+    try {
+      const res = await fetch('/api/auth/save-smtp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clear: true }),
+      });
+      if (res.ok) {
+        const passInput = document.getElementById('smtpPassInput');
+        if (passInput) passInput.value = '';
+        toast('Saved SMTP configuration cleared.');
+        loadSmtpStatus();
+      }
+    } catch (e) {
+      toast('Error clearing SMTP configuration.');
+    }
+  };
+}
+
+const smtpTestBtn = document.getElementById('smtpTestBtn');
+if (smtpTestBtn) {
+  smtpTestBtn.onclick = async () => {
+    const recipientInput = document.getElementById('smtpTestRecipient');
+    const email = recipientInput ? recipientInput.value.trim() : '';
+    if (!email) {
+      toast('Please enter a recipient email address for testing.');
+      return;
+    }
+    smtpTestBtn.disabled = true;
+    smtpTestBtn.textContent = 'Sending Test...';
+    try {
+      const res = await fetch('/api/auth/test-smtp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast('✅ Test email sent! Check ' + email);
+        loadSmtpStatus();
+      } else {
+        toast('❌ SMTP Test Failed: ' + (data.error || 'Check server logs'));
+      }
+    } catch (e) {
+      toast('Error reaching server for SMTP test.');
+    } finally {
+      smtpTestBtn.disabled = false;
+      smtpTestBtn.textContent = 'Send Test Email';
+    }
+  };
+}
 document.querySelector('#logout').onclick = async () => {
   const token = getAuthToken();
   if (token) {

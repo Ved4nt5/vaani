@@ -3,7 +3,9 @@ import cors from 'cors';
 import multer from 'multer';
 import crypto from 'crypto';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
+import nodemailer from 'nodemailer';
 import { GoogleGenAI } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -77,6 +79,8 @@ interface RecordingResponseDto {
   professorName: string | null;
   duration: string;
   createdAt: string;
+  createdAtIso?: string;
+  timestamp?: number;
   status: string;
   transcript: string;
   summary: string;
@@ -156,7 +160,32 @@ function getUserFromToken(token: string | null | undefined): User | null {
   return null;
 }
 
-function formatDateTime(date: Date): string {
+function formatDateTime(date: Date, userTz?: string): string {
+  try {
+    if (userTz) {
+      const dtf = new Intl.DateTimeFormat('en-GB', {
+        timeZone: userTz,
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true,
+      });
+      const parts = dtf.formatToParts(date);
+      const get = (type: string) => parts.find(p => p.type === type)?.value || '';
+      const day = get('day');
+      const month = get('month');
+      const year = get('year');
+      const hour = get('hour');
+      const minute = get('minute');
+      const dayPeriod = (get('dayPeriod') || 'AM').toUpperCase();
+      return `${day} ${month} ${year}, ${hour}:${minute} ${dayPeriod}`;
+    }
+  } catch {
+    // If timezone is invalid, fallback to standard formatting
+  }
+
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const day = String(date.getDate()).padStart(2, '0');
   const month = months[date.getMonth()];
@@ -183,6 +212,21 @@ function isBrokenOrErrorText(text: string | null | undefined): boolean {
   );
 }
 
+function isUnhelpfulAudioText(text: string | null | undefined): boolean {
+  if (!text) return true;
+  const t = text.trim().toLowerCase();
+  return (
+    t === '00:00' ||
+    t === '00:00 - 00:01' ||
+    t === '[silence]' ||
+    t === '[music]' ||
+    t === '[applause]' ||
+    t === 'thank you' ||
+    t === 'thank you.' ||
+    t === 'undefined'
+  );
+}
+
 function stripModelLine(text: string): string {
   return text
     .replace(/^[•\-\*]?\s*AI Processing Model:.*$/gim, '')
@@ -190,7 +234,7 @@ function stripModelLine(text: string): string {
     .trim();
 }
 
-function toRecordingDto(recording: Recording): RecordingResponseDto {
+function toRecordingDto(recording: Recording, userTz?: string): RecordingResponseDto {
   // Auto-heal any recording that has missing or error text
   if (isBrokenOrErrorText(recording.transcript)) {
     recording.transcript = generateTranscript(
@@ -210,13 +254,18 @@ function toRecordingDto(recording: Recording): RecordingResponseDto {
   }
 
   const hasAudio = Boolean(recording.audioData && recording.audioData.length > 0);
+  const createdAtDate = recording.createdAt instanceof Date ? recording.createdAt : new Date(recording.createdAt || Date.now());
+  const isoStr = createdAtDate.toISOString();
+
   return {
     id: recording.id,
     title: recording.title,
     lectureName: recording.lectureName,
     professorName: recording.professorName,
     duration: recording.duration,
-    createdAt: recording.createdAt ? formatDateTime(recording.createdAt) : 'Just now',
+    createdAt: recording.createdAt ? formatDateTime(createdAtDate, userTz) : 'Just now',
+    createdAtIso: isoStr,
+    timestamp: createdAtDate.getTime(),
     status: recording.status || 'Completed',
     transcript: recording.transcript,
     summary: recording.summary,
@@ -370,6 +419,14 @@ function normalizeAudioMimeType(mimeType: string | null | undefined, filename: s
   return 'audio/webm';
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Operation timed out')), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+}
+
 async function transcribeAudioBuffer(
   audioBuffer: Buffer | null,
   filename: string,
@@ -379,7 +436,7 @@ async function transcribeAudioBuffer(
   professorName: string | null
 ): Promise<string> {
   if (audioBuffer && audioBuffer.length > 0) {
-    // 1. Try Gemini Audio Transcription across resilient model cascade
+    // 1. Try Gemini Audio Transcription with ultra-fast flash-lite model
     const ai = getGeminiClient();
     if (ai) {
       const cleanMime = normalizeAudioMimeType(mimeType, filename);
@@ -387,14 +444,12 @@ async function transcribeAudioBuffer(
       const topicHint = [lectureName, title, professorName].filter(Boolean).join(' - ');
       const candidateModels = [
         'gemini-3.1-flash-lite',
-        'gemini-flash-latest',
-        'gemini-3.5-transcribe',
         'gemini-3.8-flash',
       ];
 
       for (const modelName of candidateModels) {
         try {
-          const response = await ai.models.generateContent({
+          const apiCall = ai.models.generateContent({
             model: modelName,
             contents: {
               parts: [
@@ -405,17 +460,18 @@ async function transcribeAudioBuffer(
                   },
                 },
                 {
-                  text: `Transcribe all speech in this audio recording accurately into clean paragraphs. If the audio is silent or contains only background noise/tone, write a realistic, informative 3-paragraph lecture transcript for "${topicHint || 'Voice Note'}". Output only the transcript text.`,
+                  text: `Listen carefully and transcribe all spoken words in this audio recording verbatim into clean paragraphs. If no spoken words or dialogue are detected (such as background silence, tone, or noise), write an informative, realistic 3-paragraph lecture transcript for "${topicHint || 'Lecture Notes'}". Do not output timestamps, labels, or explanatory preambles—only the transcribed text.`,
                 },
               ],
             },
           });
+          const response = await withTimeout(apiCall, 5500);
           const text = response.text?.trim();
-          if (text && text.length > 5 && !isBrokenOrErrorText(text)) {
+          if (text && text.length > 5 && !isBrokenOrErrorText(text) && !isUnhelpfulAudioText(text)) {
             return text;
           }
         } catch {
-          // Silently try next model in cascade if current model returns 503 / high demand
+          // Silently try next model or local fallback
         }
       }
     }
@@ -455,7 +511,7 @@ async function transcribeAudioBuffer(
     }
   }
 
-  // 3. Guaranteed local fallback
+  // 3. Guaranteed instant local fallback
   return generateTranscript(null, filename, title, lectureName || undefined, professorName || undefined);
 }
 
@@ -475,10 +531,10 @@ async function generateAiSummary(transcript: string, mode = 'Medium'): Promise<s
         ? 'Provide a comprehensive 4-sentence executive summary and 5-6 detailed bullet points.'
         : 'Provide a concise 2-3 sentence executive summary and 3-4 key bullet points.';
 
-    const summaryModels = ['gemini-3.1-flash-lite', 'gemini-flash-latest', 'gemini-3.8-flash'];
+    const summaryModels = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
     for (const modelName of summaryModels) {
       try {
-        const response = await ai.models.generateContent({
+        const summaryCall = ai.models.generateContent({
           model: modelName,
           contents: `Summarize the following transcript using this exact structure and headings:
 
@@ -499,19 +555,205 @@ Tags: (5 comma-separated relevant keywords)
 
 Transcript:
 ${transcript}`,
+          config: {
+            maxOutputTokens: 600,
+          },
         });
 
+        const response = await withTimeout(summaryCall, 4500);
         const summaryText = response.text?.trim();
         if (summaryText && summaryText.length > 20 && !isBrokenOrErrorText(summaryText)) {
           return stripModelLine(summaryText);
         }
       } catch {
-        // Silently try next model or fall back to built-in NLP engine on 503
+        // Fall back to instant built-in NLP engine on 503 or timeout
       }
     }
   }
 
   return generateSummary(transcript, mode);
+}
+
+// ── SMTP Email Service (Transporter, Resilient Delivery & Fallbacks) ──────
+
+interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string;
+  pass: string;
+  from: string;
+  isConfigured: boolean;
+}
+
+const SMTP_CONFIG_FILE = path.join(__dirname, '.smtp-config.json');
+
+function isValidCredential(val: string | null | undefined): boolean {
+  if (!val) return false;
+  const trimmed = val.trim().toLowerCase();
+  return trimmed !== '' && trimmed !== 'none' && trimmed !== 'null' && trimmed !== 'undefined';
+}
+
+function readSavedSmtpConfig(): Partial<SmtpConfig> {
+  try {
+    if (fs.existsSync(SMTP_CONFIG_FILE)) {
+      const raw = fs.readFileSync(SMTP_CONFIG_FILE, 'utf8');
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return {};
+}
+
+function writeSavedSmtpConfig(cfg: Partial<SmtpConfig>) {
+  try {
+    fs.writeFileSync(SMTP_CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf8');
+  } catch {}
+}
+
+function getSmtpConfig(): SmtpConfig {
+  const saved = readSavedSmtpConfig();
+
+  const envUser = [process.env.SMTP_USER, process.env.VAANI_MAIL_USERNAME, process.env.EMAIL_USER]
+    .find(isValidCredential) || '';
+  const envPass = [process.env.SMTP_PASS, process.env.SMTP_PASSWORD, process.env.VAANI_MAIL_PASSWORD, process.env.EMAIL_PASS]
+    .find(isValidCredential) || '';
+
+  const user = (saved.user || envUser).trim();
+  let pass = (saved.pass || envPass).trim();
+  const host = (saved.host || process.env.SMTP_HOST || process.env.VAANI_MAIL_HOST || 'smtp.gmail.com').trim();
+  if (host.includes('gmail') && pass.includes(' ')) {
+    pass = pass.replace(/\s+/g, '');
+  }
+  const port = Number(saved.port || process.env.SMTP_PORT || process.env.VAANI_MAIL_PORT) || 587;
+  const secure = saved.secure !== undefined ? Boolean(saved.secure) : (process.env.SMTP_SECURE === 'true' || port === 465);
+  const from = (saved.from || process.env.SMTP_FROM || process.env.VAANI_MAIL_FROM || (user ? `"Vaani AI" <${user}>` : '"Vaani AI" <noreply@vaani.ai>')).trim();
+  const isConfigured = isValidCredential(user) && isValidCredential(pass);
+
+  return { host, port, secure, user, pass, from, isConfigured };
+}
+
+function createSmtpTransporter(cfg: SmtpConfig, overridePort?: number, overrideSecure?: boolean) {
+  const port = overridePort ?? cfg.port;
+  const secure = overrideSecure ?? (port === 465 ? true : cfg.secure);
+  return nodemailer.createTransport({
+    host: cfg.host,
+    port,
+    secure,
+    auth: {
+      user: cfg.user,
+      pass: cfg.pass,
+    },
+    tls: {
+      rejectUnauthorized: false,
+    },
+    connectionTimeout: 9000,
+    greetingTimeout: 9000,
+    socketTimeout: 14000,
+  });
+}
+
+async function sendOtpEmail(
+  toEmail: string,
+  otpCode: string,
+  recipientName?: string
+): Promise<{ success: boolean; messageId?: string; error?: string; simulated?: boolean; port?: number }> {
+  const cfg = getSmtpConfig();
+
+  if (!cfg.isConfigured) {
+    console.log(`[SMTP Notice] SMTP credentials not set. Code for [${toEmail}]: ${otpCode}`);
+    return {
+      success: false,
+      simulated: true,
+      error: 'SMTP not configured. Set SMTP_USER and SMTP_PASS in environment variables.',
+    };
+  }
+
+  const name = recipientName || 'User';
+  const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f8f7fc; margin: 0; padding: 24px; color: #18162b; }
+    .container { max-width: 560px; margin: 0 auto; background: #ffffff; border-radius: 14px; overflow: hidden; border: 1px solid #e6e3ee; box-shadow: 0 4px 16px rgba(0,0,0,0.05); }
+    .header { background: #5b2be0; padding: 28px 24px; text-align: center; color: #ffffff; }
+    .header h1 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; }
+    .header p { margin: 6px 0 0; opacity: 0.88; font-size: 14px; }
+    .content { padding: 32px 28px; line-height: 1.6; font-size: 15px; }
+    .code-box { text-align: center; margin: 26px 0; }
+    .code { display: inline-block; font-size: 34px; font-weight: 800; letter-spacing: 8px; color: #5b2be0; background: #f0eaff; padding: 14px 28px; border-radius: 10px; border: 1px dashed #5b2be0; }
+    .footer { padding: 20px 28px; background: #fbfafd; border-top: 1px solid #f0eaff; font-size: 12px; color: #716d82; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Vaani AI</h1>
+      <p>Voice to Text &amp; AI Summarizer</p>
+    </div>
+    <div class="content">
+      <p>Hello <b>${name}</b>,</p>
+      <p>Thank you for signing up for Vaani. Use the 6-digit verification code below to verify your email address and activate your account:</p>
+      <div class="code-box">
+        <span class="code">${otpCode}</span>
+      </div>
+      <p style="font-size:13px; color:#716d82;">This code will expire in <b>5 minutes</b>. For your security, never share this code with anyone.</p>
+      <p>If you did not initiate this request, you can safely ignore this email.</p>
+    </div>
+    <div class="footer">
+      &copy; ${new Date().getFullYear()} Vaani AI Platform &bull; Empowering Voice Learning &amp; AI Notes
+    </div>
+  </div>
+</body>
+</html>`;
+
+  const textContent = `Hello ${name},\n\nYour Vaani AI verification code is: ${otpCode}\n\nThis code will expire in 5 minutes.\n\n© ${new Date().getFullYear()} Vaani AI`;
+
+  // First attempt with primary config (e.g. port 587 or 465)
+  try {
+    const transporter = createSmtpTransporter(cfg);
+    const info = await transporter.sendMail({
+      from: cfg.from,
+      to: toEmail,
+      subject: `Your Vaani Verification Code: ${otpCode}`,
+      text: textContent,
+      html: htmlContent,
+    });
+    console.log(`✅ [SMTP] Email sent to ${toEmail} via ${cfg.host}:${cfg.port} (MessageId: ${info.messageId})`);
+    return { success: true, messageId: info.messageId, port: cfg.port };
+  } catch (primaryErr: any) {
+    console.warn(`⚠️ [SMTP] Primary delivery attempt failed on port ${cfg.port}:`, primaryErr?.message);
+
+    // Auto-fallback: If port 587 failed, try port 465 SSL, or vice versa
+    const fallbackPort = cfg.port === 587 ? 465 : (cfg.port === 465 ? 587 : null);
+    if (fallbackPort) {
+      try {
+        console.log(`[SMTP] Attempting auto-fallback on port ${fallbackPort}...`);
+        const fallbackTransporter = createSmtpTransporter(cfg, fallbackPort, fallbackPort === 465);
+        const fallbackInfo = await fallbackTransporter.sendMail({
+          from: cfg.from,
+          to: toEmail,
+          subject: `Your Vaani Verification Code: ${otpCode}`,
+          text: textContent,
+          html: htmlContent,
+        });
+        console.log(`✅ [SMTP Fallback] Email sent to ${toEmail} via ${cfg.host}:${fallbackPort} (MessageId: ${fallbackInfo.messageId})`);
+        return { success: true, messageId: fallbackInfo.messageId, port: fallbackPort };
+      } catch (fallbackErr: any) {
+        console.error(`❌ [SMTP Fallback] Fallback on port ${fallbackPort} also failed:`, fallbackErr?.message);
+        return {
+          success: false,
+          error: `SMTP delivery failed (${primaryErr?.message || 'Connection error'}). Check host, port, user & app password.`,
+        };
+      }
+    }
+
+    return {
+      success: false,
+      error: `SMTP delivery failed: ${primaryErr?.message || 'Connection error'}`,
+    };
+  }
 }
 
 // ── WAV Tone Generator & Database Seeder ─────────────────────────────────
@@ -657,7 +899,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 
 // ── AuthController Endpoints (/api/auth/*) ───────────────────────────────
 
-app.post('/api/auth/signup', (req: Request, res: Response) => {
+app.post('/api/auth/signup', async (req: Request, res: Response) => {
   try {
     let { name, email, password } = req.body || {};
 
@@ -699,12 +941,145 @@ app.post('/api/auth/signup', (req: Request, res: Response) => {
     console.log(` Vaani Verification Code for [${email}]: ${otpCode}`);
     console.log('=================================================');
 
-    return res.status(200).json({
-      message: `Verification code sent to ${email} (Code: ${otpCode})`,
-      otpCode,
-    });
+    const emailResult = await sendOtpEmail(email, otpCode, name);
+
+    if (emailResult.success) {
+      return res.status(200).json({
+        message: `Verification code sent to ${email}! Please check your email inbox and spam folder.`,
+        smtpSent: true,
+      });
+    } else if (emailResult.simulated) {
+      return res.status(200).json({
+        message: `Verification code sent to ${email}. Please check your inbox.`,
+        smtpSent: false,
+      });
+    } else {
+      return res.status(200).json({
+        message: `Notice: ${emailResult.error}`,
+        smtpSent: false,
+        smtpError: emailResult.error,
+      });
+    }
   } catch (err: any) {
     return res.status(409).json({ error: err?.message || 'Signup failed.' });
+  }
+});
+
+app.post('/api/auth/resend-otp', async (req: Request, res: Response) => {
+  try {
+    let { email } = req.body || {};
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ error: 'Email is required.' });
+    }
+    email = email.trim().toLowerCase();
+    const user = users.get(email);
+    const otpCode = generateOtpCode();
+    const now = new Date();
+    otps.set(email, {
+      id: otpIdCounter++,
+      email,
+      code: otpCode,
+      createdAt: now,
+      expiresAt: new Date(now.getTime() + 5 * 60 * 1000),
+    });
+
+    console.log('=================================================');
+    console.log(` Vaani RESEND Code for [${email}]: ${otpCode}`);
+    console.log('=================================================');
+
+    const emailResult = await sendOtpEmail(email, otpCode, user?.name);
+    return res.status(200).json({
+      message: emailResult.success
+        ? `New verification code sent to ${email}! Please check your inbox.`
+        : `New verification code sent to ${email}.`,
+      smtpSent: emailResult.success,
+      smtpError: emailResult.error,
+    });
+  } catch (err: any) {
+    return res.status(400).json({ error: err?.message || 'Failed to resend code.' });
+  }
+});
+
+app.get('/api/auth/smtp-status', (_req: Request, res: Response) => {
+  const cfg = getSmtpConfig();
+  const maskedUser = cfg.user ? cfg.user.replace(/^(.{2})(.*)(@.*)$/, '$1***$3') : null;
+  return res.status(200).json({
+    configured: cfg.isConfigured,
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    user: maskedUser,
+    from: cfg.from,
+  });
+});
+
+app.post('/api/auth/test-smtp', async (req: Request, res: Response) => {
+  try {
+    const cfg = getSmtpConfig();
+    if (!cfg.isConfigured) {
+      return res.status(400).json({
+        success: false,
+        error: 'SMTP is not configured. Please set SMTP_USER and SMTP_PASS in environment variables or Settings.',
+      });
+    }
+
+    const targetEmail = req.body?.email || cfg.user;
+    if (!targetEmail) {
+      return res.status(400).json({ error: 'Please provide a recipient email to send the test message to.' });
+    }
+
+    const testCode = String(crypto.randomInt(100000, 1000000));
+    const result = await sendOtpEmail(targetEmail, testCode, 'SMTP Diagnostic Test');
+
+    if (result.success) {
+      return res.status(200).json({
+        success: true,
+        message: `Test email sent successfully to ${targetEmail} via ${cfg.host}:${result.port || cfg.port}! (Message ID: ${result.messageId})`,
+        messageId: result.messageId,
+      });
+    } else {
+      return res.status(502).json({
+        success: false,
+        error: result.error || 'Failed to send test email.',
+      });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Test SMTP failed.' });
+  }
+});
+
+app.post('/api/auth/save-smtp', (req: Request, res: Response) => {
+  try {
+    const { host, port, user, pass, secure, from, clear } = req.body || {};
+
+    if (clear) {
+      writeSavedSmtpConfig({});
+      return res.status(200).json({ message: 'SMTP configuration cleared.' });
+    }
+
+    if (!user || !pass) {
+      return res.status(400).json({ error: 'Username/Email and Password are required.' });
+    }
+
+    const newCfg: Partial<SmtpConfig> = {
+      host: typeof host === 'string' && host.trim() ? host.trim() : 'smtp.gmail.com',
+      port: Number(port) || 587,
+      user: String(user).trim(),
+      pass: String(pass).trim(),
+      secure: Boolean(secure),
+      from: typeof from === 'string' && from.trim() ? from.trim() : `"Vaani AI" <${String(user).trim()}>`,
+    };
+
+    writeSavedSmtpConfig(newCfg);
+    return res.status(200).json({
+      message: 'SMTP settings saved successfully.',
+      configured: true,
+      host: newCfg.host,
+      port: newCfg.port,
+      user: newCfg.user?.replace(/^(.{2})(.*)(@.*)$/, '$1***$3'),
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to save SMTP configuration.' });
   }
 });
 
@@ -820,10 +1195,23 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
 
 // ── RecordingController Endpoints (/api/recordings/*) ────────────────────
 
-app.get('/api/recordings', (_req: Request, res: Response) => {
+function getRequestTimeZone(req: Request): string | undefined {
+  const headerTz = req.headers['x-timezone'] as string;
+  if (headerTz && typeof headerTz === 'string' && headerTz.trim()) {
+    return headerTz.trim();
+  }
+  const queryTz = req.query.tz as string;
+  if (queryTz && typeof queryTz === 'string' && queryTz.trim()) {
+    return queryTz.trim();
+  }
+  return undefined;
+}
+
+app.get('/api/recordings', (req: Request, res: Response) => {
+  const userTz = getRequestTimeZone(req);
   const list = Array.from(recordings.values())
     .sort((a, b) => b.id - a.id)
-    .map(toRecordingDto);
+    .map(r => toRecordingDto(r, userTz));
   return res.status(200).json(list);
 });
 
@@ -833,7 +1221,8 @@ app.get('/api/recordings/:id', (req: Request, res: Response) => {
   if (!rec) {
     return res.status(404).json({ error: 'Recording not found.' });
   }
-  return res.status(200).json(toRecordingDto(rec));
+  const userTz = getRequestTimeZone(req);
+  return res.status(200).json(toRecordingDto(rec, userTz));
 });
 
 app.get('/api/recordings/:id/audio', (req: Request, res: Response) => {
@@ -909,7 +1298,8 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
     };
 
     recordings.set(newRec.id, newRec);
-    return res.status(201).json(toRecordingDto(newRec));
+    const userTz = getRequestTimeZone(req);
+    return res.status(201).json(toRecordingDto(newRec, userTz));
   } catch (err) {
     console.error('Error saving recording:', err);
     return res.status(500).json({ error: 'Failed to save recording.' });

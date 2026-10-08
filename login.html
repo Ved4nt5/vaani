@@ -67,10 +67,11 @@
       <div id="otpSection" class="auth-form">
         <h2>Verify Your Email</h2>
         <p class="auth-subtitle">We sent a 6-digit code to <b id="otpEmailDisplay"></b></p>
+        <div id="otpSmtpBadge" style="margin: 8px 0 14px; font-size: 12.5px; color: #4920c5; background: #f0eaff; padding: 7px 12px; border-radius: 7px; display: none; text-align: center;"></div>
 
         <label class="auth-label">
           Verification Code
-          <input type="text" id="otpCode" placeholder="Enter 6-digit code" maxlength="6" pattern="[0-9]{6}" required>
+          <input type="text" id="otpCode" placeholder="Enter 6-digit code" maxlength="6" pattern="[0-9]{6}" autocomplete="off" required>
         </label>
 
         <button type="button" class="auth-btn" id="verifyOtpBtn">Verify & Continue</button>

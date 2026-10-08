@@ -34,6 +34,7 @@
       <header>
         <span class="mobile-brand"><b>Vaani</b></span>
         <button class="primary" data-page="new">+ New Lecture</button>
+        <button class="outline" data-page="new" data-tab="upload" style="margin-left:6px;">⬆️ Upload Audio</button>
         <span class="profile" id="profileName">User</span>
       </header>
 
@@ -49,7 +50,10 @@
         <div class="card">
           <div class="cardhead">
             <h2>Recent Lectures</h2>
-            <button class="outline" data-page="recordings">View All</button>
+            <div style="display:flex;gap:8px;">
+              <button class="primary" data-page="new" data-tab="upload" style="padding:8px 14px;font-size:12.5px;">⬆️ Upload Audio</button>
+              <button class="outline" data-page="recordings">View All</button>
+            </div>
           </div>
           <table>
             <thead>
@@ -110,12 +114,33 @@
           </div>
 
           <div id="uploadPane" class="upload hidden">
-            <label>
-              <b>Choose an audio file</b>
-              <small>MP3, WAV, WEBM or M4A &bull; Max 200 MB</small>
-              <input id="audio" type="file" accept="audio/*">
+            <label id="dropZone" for="audio" style="position:relative;cursor:pointer;transition:border-color .2s,background .2s;">
+              <svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="var(--p)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:6px;">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              <b style="font-size:15px;color:var(--text);">Choose an audio file or drag &amp; drop here</b>
+              <small style="color:var(--muted);">Supports MP3, WAV, M4A, WEBM, AAC, FLAC, OGG &bull; Up to 200 MB</small>
+              <span class="outline" style="margin-top:8px;pointer-events:none;padding:7px 16px;font-size:12.5px;">Browse Audio File</span>
+              <input id="audio" type="file" accept="audio/*,.mp3,.wav,.webm,.m4a,.aac,.ogg,.flac,.mp4,.wma,.opus,.m4p">
             </label>
-            <p id="file"></p>
+
+            <div id="fileInfoBox" style="display:none;margin-top:14px;padding:12px 16px;border-radius:10px;background:#f0eaff;border:1px solid #d7c9f8;text-align:left;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                  <span style="font-size:22px;">🎵</span>
+                  <div style="min-width:0;">
+                    <b id="fileInfoName" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-size:13.5px;"></b>
+                    <small id="fileInfoSize" style="color:var(--muted);font-size:12px;"></small>
+                  </div>
+                </div>
+                <button type="button" class="outline" id="removeFileBtn" style="padding:4px 10px;font-size:11.5px;color:#d32f2f;border-color:#ffcdd2;">Remove</button>
+              </div>
+              <audio id="uploadAudioPreview" controls style="width:100%;height:32px;margin-top:10px;outline:none;display:none;"></audio>
+            </div>
+
+            <p id="file" style="margin-top:6px;font-weight:600;color:var(--p);font-size:12.5px;"></p>
             <div style="margin-top: 15px; text-align: left;">
               <label style="font-weight: 700; font-size: 13px; color: var(--p); display: block; margin-bottom: 6px;">
                 Optional Transcript Notes (leave empty for AI auto-transcription):
@@ -352,7 +377,53 @@
               <option>Detailed</option>
             </select>
           </label>
+          <label>System Timezone
+            <input id="settingsTimezone" readonly style="background:#f8f9fd;color:#4920c5;font-weight:500;cursor:default;" title="All recording dates and timestamps are automatically synchronized to your local timezone">
+          </label>
           <button class="primary" id="save">Save Changes</button>
+          
+          <div style="margin-top: 36px; border-top: 1px solid var(--border); padding-top: 24px;">
+            <h2 style="margin: 0 0 6px;">SMTP Email Delivery &amp; Diagnostics</h2>
+            <p class="muted" style="margin-bottom: 16px;">Live delivery status for verification codes, password resets, and notifications.</p>
+            <div id="smtpStatusBox" style="padding: 14px 16px; border-radius: 9px; background: #faf9fe; border: 1px solid var(--border); font-size: 13.5px; line-height: 1.6;">
+              <span id="smtpStatusText">Checking SMTP server connection...</span>
+            </div>
+
+            <div style="margin-top: 18px; display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <label class="meta-label">
+                SMTP Host
+                <input id="smtpHostInput" type="text" placeholder="smtp.gmail.com" class="meta-input">
+              </label>
+              <label class="meta-label">
+                SMTP Port
+                <input id="smtpPortInput" type="number" placeholder="587" class="meta-input">
+              </label>
+              <label class="meta-label">
+                SMTP Username / Email
+                <input id="smtpUserInput" type="email" placeholder="e.g. yourname@gmail.com" class="meta-input">
+              </label>
+              <label class="meta-label">
+                SMTP App Password
+                <input id="smtpPassInput" type="password" placeholder="e.g. 16-character Gmail App Password" class="meta-input">
+              </label>
+            </div>
+
+            <div style="display:flex; gap:10px; margin-top: 14px; flex-wrap:wrap;">
+              <button class="primary" id="smtpSaveBtn" type="button">Save &amp; Activate SMTP</button>
+              <button class="outline" id="smtpClearBtn" type="button">Clear Saved SMTP</button>
+            </div>
+
+            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--border);">
+              <label class="meta-label" style="margin-bottom: 6px;">Test SMTP Email Delivery</label>
+              <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                <input id="smtpTestRecipient" type="email" placeholder="Recipient email for test..." style="flex:1; min-width:210px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
+                <button class="outline" id="smtpTestBtn" type="button" style="white-space:nowrap;">Send Test Email</button>
+              </div>
+            </div>
+            <p style="font-size:12px; color:var(--muted); margin-top:10px; line-height:1.5;">
+              Tip: For Gmail accounts, generate a 16-character App Password at <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" style="color:var(--p); font-weight:600;">Google Account &rsaquo; Security &rsaquo; App Passwords</a>. You can also configure <code>SMTP_USER</code> and <code>SMTP_PASS</code> in environment variables.
+            </p>
+          </div>
         </div>
       </section>
     </main>
