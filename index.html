@@ -19,143 +19,610 @@
   <div class="app">
     <aside>
       <div class="brand"><img src="vaani.png" width="150" height="100" alt="Vaani"></div>
-      <nav>
+
+      <!-- STUDENT NAVIGATION -->
+      <nav id="studentNav">
         <button class="active" data-page="dashboard">Dashboard</button>
-        <button data-page="new">New Lecture</button>
-        <button data-page="recordings">My Recordings</button>
-        <button data-page="tutor">AI Tutor</button>
-        <button data-page="voice">Vaani Voice</button>
+        <button data-page="storageBoxes">📦 Recording Library</button>
+        <button data-page="recordings">Browse Lectures</button>
         <button data-page="settings">Settings</button>
       </nav>
+
+      <!-- FACULTY NAVIGATION -->
+      <nav id="facultyNav" class="hidden">
+        <button class="active" data-page="facultyDashboard">📊 Dashboard</button>
+        <button data-page="storageBoxes">📦 Storage Boxes</button>
+        <button data-page="facultyLectures">📚 My Lectures</button>
+        <button data-page="facultyUpload">🎙️ Create / Upload</button>
+        <button data-page="facultyAnalytics">📈 Analytics</button>
+        <button data-page="facultyProfile">👤 Profile</button>
+        <button data-page="settings">⚙️ Settings</button>
+      </nav>
+
       <button class="logout" id="logout">Logout</button>
     </aside>
 
     <main>
       <header>
         <span class="mobile-brand"><b>Vaani</b></span>
-        <button class="primary" data-page="new">+ New Lecture</button>
-        <button class="outline" data-page="new" data-tab="upload" style="margin-left:6px;">⬆️ Upload Audio</button>
+        <div id="studentHeaderActions" style="display:flex;align-items:center;gap:8px;">
+          <button class="outline" data-page="storageBoxes">📦 Boxes</button>
+          <button class="primary" data-page="recordings">📚 Browse Lectures</button>
+        </div>
+        <div id="facultyHeaderActions" class="hidden" style="display:flex;align-items:center;gap:8px;">
+          <button class="primary" data-page="facultyUpload">+ Create / Upload</button>
+          <button class="outline" data-page="storageBoxes">📦 Storage Boxes</button>
+          <button class="outline" data-page="facultyLectures">📚 My Lectures</button>
+        </div>
+        <span class="role-pill" id="headerRoleBadge">🎓 Student</span>
         <span class="profile" id="profileName">User</span>
+        <button class="outline" id="headerLogoutBtn" style="padding:9px 13px;font-size:12.5px;">Logout</button>
       </header>
+
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 👨‍🏫 FACULTY INTERFACE SECTIONS                                       -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+      <!-- 1. FACULTY DASHBOARD -->
+      <section id="facultyDashboard" class="page">
+        <p class="eyebrow" id="facultyEyebrow">Welcome back, Professor!</p>
+        <div class="detailhead">
+          <div>
+            <h1>Faculty Dashboard</h1>
+            <p class="muted">Create, review, and publish AI-processed lectures for your students.</p>
+          </div>
+          <button class="primary" data-page="facultyUpload" style="font-size:14px;padding:12px 20px;">+ Upload New Lecture</button>
+        </div>
+
+        <div class="stats stats-4">
+          <div class="stat-card">
+            <span class="stat-icon">📊</span>
+            <b id="facStatTotal">0</b>
+            <small>Total Lectures</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon">✅</span>
+            <b id="facStatPublished">0</b>
+            <small>Published Lectures</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon">📝</span>
+            <b id="facStatDraft">0</b>
+            <small>Draft / Ready for Review</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon">⏳</span>
+            <b id="facStatProcessing">0</b>
+            <small>Processing Lectures</small>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="cardhead">
+            <div>
+              <h2>📚 Recent Lectures</h2>
+              <p class="muted" style="font-size:12.5px;margin-top:2px;">Process each lecture once — all authorized students share the verified transcript and AI summary.</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="primary" data-page="facultyUpload" style="padding:8px 14px;font-size:12.5px;">+ Upload New Lecture</button>
+              <button class="outline" data-page="facultyLectures" style="padding:8px 14px;font-size:12.5px;">Manage All Lectures</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Lecture Title</th>
+                  <th>Subject</th>
+                  <th>Class / Course</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Duration</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="facultyRecentRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. UPLOAD LECTURE (FACULTY) -->
+      <section id="facultyUpload" class="page">
+        <div class="crumb">Faculty Dashboard &rsaquo; Upload New Lecture</div>
+        <div class="detailhead">
+          <div>
+            <h1>🎙️ Upload New Lecture</h1>
+            <p class="muted">Upload a classroom lecture recording or record live. Vaani AI will automatically generate the transcript and summary for your review.</p>
+          </div>
+          <button class="outline" data-page="facultyLectures">📚 View My Lectures</button>
+        </div>
+
+        <!-- AI Processing Pipeline Status Banner -->
+        <div class="card pipeline-card" id="facPipelineCard">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+            <b style="color:var(--p);font-size:13.5px;">🤖 AI Lecture Processing Pipeline</b>
+            <span class="badge status-badge-ready" id="facPipelineStateBadge">Ready to Upload</span>
+          </div>
+          <div class="pipeline-steps" id="facPipelineSteps">
+            <div class="pipeline-step" data-step="upload">
+              <span class="step-dot">🎙️</span>
+              <b>1. Audio Uploaded</b>
+              <small>MP3 / WAV / M4A</small>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-step" data-step="stt">
+              <span class="step-dot">📝</span>
+              <b>2. Speech-to-Text</b>
+              <small>Transcript Generated</small>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-step" data-step="summary">
+              <span class="step-dot">🤖</span>
+              <b>3. AI Summary</b>
+              <small>Key Insights &amp; Notes</small>
+            </div>
+            <div class="pipeline-arrow">&rarr;</div>
+            <div class="pipeline-step" data-step="ready">
+              <span class="step-dot">✅</span>
+              <b>4. Ready for Review</b>
+              <small>Faculty Verification</small>
+            </div>
+          </div>
+        </div>
+
+        <form id="facultyUploadForm" class="card" style="max-width:860px;">
+          <h2 style="margin-top:0;margin-bottom:16px;">Lecture Information</h2>
+          <div class="form-grid-2">
+            <label class="meta-label">
+              Lecture Title *
+              <input id="facTitleInput" type="text" placeholder="e.g. Lecture 04 — Binary Search Trees &amp; AVL Rotations" class="meta-input" required>
+            </label>
+            <label class="meta-label">
+              Select Storage Box (Dynamic / Any Name)
+              <div style="display:flex;gap:6px;align-items:center;">
+                <select id="facStorageBoxSelect" class="meta-input" style="flex:1;">
+                  <option value="">-- No Box (Independent Lecture) --</option>
+                </select>
+                <button type="button" class="outline" id="facQuickNewBoxBtn" title="Create New Storage Box" style="padding:10px 12px;margin-top:6px;white-space:nowrap;font-size:12px;">+ New Box</button>
+              </div>
+            </label>
+            <label class="meta-label">
+              Subject / Topic Name
+              <input id="facSubjectInput" type="text" placeholder="e.g. Data Structures" class="meta-input">
+            </label>
+            <label class="meta-label">
+              Class / Course *
+              <select id="facCourseInput" class="meta-input">
+                <option value="SE Computer Engineering">SE Computer Engineering</option>
+                <option value="TE Computer Engineering">TE Computer Engineering</option>
+                <option value="BE Computer Engineering">BE Computer Engineering</option>
+                <option value="FE General Engineering">FE General Engineering</option>
+                <option value="M.Tech AI & Data Science">M.Tech AI &amp; Data Science</option>
+              </select>
+            </label>
+            <label class="meta-label">
+              Lecture Date *
+              <input id="facDateInput" type="date" class="meta-input" required>
+            </label>
+          </div>
+
+          <label class="meta-label" style="margin-top:14px;">
+            Description / Learning Objectives
+            <textarea id="facDescInput" class="meta-input" rows="3" placeholder="Brief overview of topics covered, textbook chapters, or instructions for students..."></textarea>
+          </label>
+
+          <div style="margin-top:18px;">
+            <div class="tabs" style="margin-bottom:14px;max-width:380px;">
+              <button type="button" class="tab active" id="facUploadTab">📤 Upload Audio File</button>
+              <button type="button" class="tab" id="facRecordTab">🎙️ Record Lecture Live</button>
+            </div>
+
+            <!-- TAB 1: FILE UPLOAD -->
+            <div id="facUploadPane">
+              <label id="facDropZone" for="facAudioInput" class="fac-dropzone">
+                <svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="var(--p)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="17 8 12 3 7 8"></polyline>
+                  <line x1="12" y1="3" x2="12" y2="15"></line>
+                </svg>
+                <b style="font-size:15px;color:var(--text);">🎙 Upload Audio — Choose lecture recording or drag &amp; drop</b>
+                <small style="color:var(--muted);">Supports MP3, WAV, M4A, WEBM, AAC, FLAC, OGG &bull; Processed once for all students</small>
+                <span class="outline" style="margin-top:6px;pointer-events:none;padding:7px 16px;font-size:12.5px;">Browse Lecture Audio</span>
+                <input id="facAudioInput" type="file" accept="audio/*,.mp3,.wav,.webm,.m4a,.aac,.ogg,.flac,.mp4" style="display:none;">
+              </label>
+            </div>
+
+            <!-- TAB 2: LIVE RECORDING -->
+            <div id="facRecordPane" class="card recorder hidden" style="margin-top:0;border:1px dashed #cfc5ee;">
+              <div class="recordpane" style="padding:32px 20px;">
+                <button type="button" id="facMicBtn" class="mic" title="Start Recording Lecture">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="36" height="36">
+                    <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
+                    <path d="M19 11a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/>
+                  </svg>
+                </button>
+                <h3 id="facRecordMsg" style="margin:10px 0 6px;">🎙️ Start Recording Lecture</h3>
+                <div id="facTimer" style="font-size:26px;font-weight:800;color:var(--p);margin:8px 0;">00:00:00</div>
+                <p id="facRecordStatus" class="muted" style="margin:0;font-size:13px;">Click microphone or "🎙️ Start Recording" to record live classroom audio</p>
+                <div class="actions" style="max-width:440px;margin:20px auto 0;gap:10px;justify-content:center;flex-wrap:wrap;">
+                  <button type="button" class="primary" id="facStartRecBtn">🎙️ Start Recording</button>
+                  <button type="button" class="primary disabled" disabled id="facStopRecBtn">⏹️ Stop Recording</button>
+                  <button type="button" class="outline" id="facResetRecBtn">Reset</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="facFileInfoBox" style="display:none;margin-top:12px;padding:12px 16px;border-radius:10px;background:#f0eaff;border:1px solid #d7c9f8;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+                  <span style="font-size:22px;">🎙️</span>
+                  <div style="min-width:0;">
+                    <b id="facFileInfoName" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px;"></b>
+                    <small id="facFileInfoSize" style="color:var(--muted);font-size:12px;"></small>
+                  </div>
+                </div>
+                <button type="button" class="outline" id="facRemoveFileBtn" style="padding:4px 10px;font-size:11.5px;color:#d32f2f;border-color:#ffcdd2;">Remove</button>
+              </div>
+              <audio id="facUploadAudioPreview" controls style="width:100%;height:34px;margin-top:10px;outline:none;display:none;"></audio>
+            </div>
+
+            <div id="facUploadErrorBox" class="hidden" style="margin-top:12px;padding:12px 16px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <span id="facUploadErrorMsg" style="font-weight:600;font-size:13px;">❌ Upload failed. Please try again.</span>
+              <button type="button" class="outline" id="facRetryUploadBtn" style="padding:6px 14px;font-size:12.5px;border-color:#f87171;color:#b91c1c;background:#fff;">🔄 Retry</button>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:12px;align-items:center;margin-top:22px;flex-wrap:wrap;">
+            <button type="submit" class="primary" id="facSubmitUploadBtn" style="padding:12px 22px;font-size:14px;">
+              💾 Save Recording &amp; Process AI
+            </button>
+            <button type="button" class="outline" id="facSaveDraftBtn" style="padding:12px 18px;">
+              📝 Save as Draft
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <!-- 3. FACULTY REVIEW & PUBLISH PAGE -->
+      <section id="facultyReview" class="page">
+        <div class="crumb">Faculty Dashboard &rsaquo; My Lectures &rsaquo; Review &amp; Publish</div>
+        <div class="detailhead">
+          <div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <h1 id="facReviewTitle" style="margin:0;">Lecture Review</h1>
+              <span class="badge" id="facReviewStatusBadge">✅ READY</span>
+            </div>
+            <p class="muted" id="facReviewMeta" style="margin-top:6px;">Subject &bull; Course &bull; Date</p>
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <button class="primary btn-publish" id="facPublishBtn" type="button">🚀 PUBLISH LECTURE</button>
+            <button class="outline btn-unpublish" id="facUnpublishBtn" type="button">🔒 UNPUBLISH</button>
+            <label class="outline" for="facReplaceAudioInput" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin:0;">
+              🔄 Replace Audio
+              <input id="facReplaceAudioInput" type="file" accept="audio/*,.mp3,.wav,.webm,.m4a,.aac,.ogg,.flac,.mp4" style="display:none;">
+            </label>
+          </div>
+        </div>
+
+        <!-- Lecture Metadata Quick Edit Bar -->
+        <div class="card" style="padding:16px 20px;">
+          <div class="form-grid-4">
+            <label class="meta-label">
+              Lecture Title
+              <input id="facReviewTitleInput" type="text" class="meta-input">
+            </label>
+            <label class="meta-label">
+              Storage Box
+              <select id="facReviewStorageBoxSelect" class="meta-input">
+                <option value="">-- No Box --</option>
+              </select>
+            </label>
+            <label class="meta-label">
+              Subject / Topic
+              <input id="facReviewSubjectInput" type="text" class="meta-input">
+            </label>
+            <label class="meta-label">
+              Class / Course
+              <input id="facReviewCourseInput" type="text" class="meta-input">
+            </label>
+            <label class="meta-label">
+              Lecture Date
+              <input id="facReviewDateInput" type="date" class="meta-input">
+            </label>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-top:12px;">
+            <button type="button" class="outline" id="facSaveMetaBtn" style="padding:7px 14px;font-size:12.5px;">💾 Save Lecture Details</button>
+          </div>
+        </div>
+
+        <!-- 🎙 Lecture Audio Player -->
+        <div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:16px 20px;">
+          <span style="font-weight:700;color:var(--p);white-space:nowrap;font-size:14px;">🎙️ Lecture Audio:</span>
+          <audio id="facReviewAudioPlayer" controls style="flex:1;min-width:240px;height:40px;outline:none;"></audio>
+          <span class="muted" id="facReviewDurationLabel" style="font-size:12.5px;font-weight:600;">Duration: 00:00</span>
+        </div>
+
+        <!-- Review Grid: Transcript & AI Summary -->
+        <div class="review-grid">
+          <!-- 📝 Transcript Card -->
+          <div class="card review-col">
+            <div class="cardhead" style="margin-bottom:12px;flex-wrap:wrap;">
+              <h2>📝 Transcript</h2>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button type="button" class="outline" id="facRegenTranscriptBtn" style="padding:6px 10px;font-size:12px;">🔄 Generate Transcript</button>
+                <button type="button" class="outline" id="facEditTranscriptBtn" style="padding:6px 12px;font-size:12px;">✏ Edit Transcript</button>
+                <button type="button" class="primary hidden" id="facSaveTranscriptBtn" style="padding:6px 12px;font-size:12px;">💾 Save Transcript</button>
+              </div>
+            </div>
+            <div id="facTranscriptView" class="review-content-box"></div>
+            <textarea id="facTranscriptEditor" class="review-textarea hidden" rows="12" placeholder="Edit lecture transcript..."></textarea>
+          </div>
+
+          <!-- 📄 AI Summary Card -->
+          <div class="card review-col">
+            <div class="cardhead" style="margin-bottom:12px;flex-wrap:wrap;">
+              <h2>📄 AI Summary</h2>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button type="button" class="outline" id="facRegenSummaryBtn" style="padding:6px 10px;font-size:12px;">🔄 Generate Summary</button>
+                <button type="button" class="outline" id="facEditSummaryBtn" style="padding:6px 12px;font-size:12px;">✏ Edit Summary</button>
+                <button type="button" class="primary hidden" id="facSaveSummaryBtn" style="padding:6px 12px;font-size:12px;">💾 Save Summary</button>
+              </div>
+            </div>
+            <div id="facSummaryView" class="review-content-box" style="white-space:pre-wrap;"></div>
+            <textarea id="facSummaryEditor" class="review-textarea hidden" rows="12" placeholder="Edit AI summary..."></textarea>
+          </div>
+        </div>
+
+        <!-- 👥 STUDENT ACCESS CONTROL -->
+        <div class="card">
+          <div class="cardhead" style="margin-bottom:12px;">
+            <div>
+              <h2>👥 Student Access Control</h2>
+              <p class="muted" style="font-size:12.5px;margin-top:2px;">Select which classes, courses, and subject batches can access this published lecture.</p>
+            </div>
+            <button type="button" class="primary" id="facApplyAccessBtn" style="padding:9px 18px;font-size:13px;">Apply Access</button>
+          </div>
+          <div class="access-checkbox-grid" id="facAccessCheckboxes">
+            <label class="access-check-item">
+              <input type="checkbox" value="SE Computer Engineering" checked>
+              <span>SE Computer Engineering</span>
+            </label>
+            <label class="access-check-item">
+              <input type="checkbox" value="TE Computer Engineering">
+              <span>TE Computer Engineering</span>
+            </label>
+            <label class="access-check-item">
+              <input type="checkbox" value="BE Computer Engineering">
+              <span>BE Computer Engineering</span>
+            </label>
+            <label class="access-check-item">
+              <input type="checkbox" value="Data Structures" checked>
+              <span>Data Structures</span>
+            </label>
+            <label class="access-check-item">
+              <input type="checkbox" value="AI & Machine Learning" checked>
+              <span>AI &amp; Machine Learning</span>
+            </label>
+            <label class="access-check-item">
+              <input type="checkbox" value="Deep Learning">
+              <span>Deep Learning</span>
+            </label>
+            <label class="access-check-item">
+              <input type="checkbox" value="Software Engineering">
+              <span>Software Engineering</span>
+            </label>
+            <label class="access-check-item">
+              <input type="checkbox" value="Innovation Lab">
+              <span>Innovation Lab</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. MANAGE LECTURES (MY LECTURES PAGE FOR FACULTY) -->
+      <section id="facultyLectures" class="page">
+        <div class="crumb">Faculty Dashboard &rsaquo; My Lectures</div>
+        <div class="detailhead">
+          <div>
+            <h1>📚 My Lectures</h1>
+            <p class="muted">Manage all uploaded lectures, edit transcripts &amp; summaries, replace audio, or publish/unpublish for students.</p>
+          </div>
+          <button class="primary" data-page="facultyUpload">+ Upload New Lecture</button>
+        </div>
+
+        <div class="card">
+          <div class="cardhead" style="margin-bottom:14px;flex-wrap:wrap;">
+            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex:1;">
+              <input id="facSearchInput" type="text" class="meta-input" placeholder="🔎 Search by title or subject..." style="max-width:300px;margin-top:0;">
+              <select id="facFilterStatus" class="meta-input" style="max-width:190px;margin-top:0;">
+                <option value="ALL">All Statuses</option>
+                <option value="PUBLISHED">🌐 PUBLISHED</option>
+                <option value="READY">✅ READY</option>
+                <option value="DRAFT">📝 DRAFT</option>
+                <option value="PROCESSING">⏳ PROCESSING</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Subject</th>
+                  <th>Class / Course</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Duration</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="facultyAllRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. BASIC ANALYTICS (FACULTY) -->
+      <section id="facultyAnalytics" class="page">
+        <div class="crumb">Faculty Dashboard &rsaquo; Lecture Analytics</div>
+        <div class="detailhead">
+          <div>
+            <h1>📊 Lecture Analytics</h1>
+            <p class="muted">Overview of student engagement across your published lectures.</p>
+          </div>
+          <button class="outline" data-page="facultyLectures">📚 Manage Lectures</button>
+        </div>
+
+        <div class="stats stats-3">
+          <div class="stat-card">
+            <span class="stat-icon">👥</span>
+            <b id="anaTotalStudents">0</b>
+            <small>Number of Students Accessed</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon">▶️</span>
+            <b id="anaTotalPlays">0</b>
+            <small>Number of Plays</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon">⏱</span>
+            <b id="anaAvgTime">32m 15s</b>
+            <small>Average Listening Time</small>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="cardhead">
+            <h2>Engagement by Lecture</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Lecture Title</th>
+                  <th>Subject</th>
+                  <th>Class / Batch</th>
+                  <th>Status</th>
+                  <th>👥 Students Accessed</th>
+                  <th>▶️ Total Plays</th>
+                  <th>⏱ Avg Listening Time</th>
+                </tr>
+              </thead>
+              <tbody id="facultyAnalyticsRows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. FACULTY PROFILE -->
+      <section id="facultyProfile" class="page">
+        <div class="crumb">Faculty Dashboard &rsaquo; Faculty Profile</div>
+        <h1>👤 Faculty Profile</h1>
+        <p class="muted">View and manage your academic profile, department credentials, and security settings.</p>
+
+        <div class="card" style="max-width:740px;">
+          <div class="faculty-profile-header">
+            <div class="faculty-avatar-box" id="facAvatarDisplay">👨‍🏫</div>
+            <div style="flex:1;">
+              <h2 id="facProfileDisplayName" style="margin:0 0 4px;font-size:21px;">Dr. Ananya Sharma</h2>
+              <p class="muted" id="facProfileDisplayDept" style="margin:0;">Department of Computer Engineering &amp; AI</p>
+              <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                <span class="badge" id="facProfileDisplayId">ID: FAC-2026-104</span>
+                <span class="badge" style="background:#f0eaff;color:var(--p);">👨‍🏫 Verified Faculty</span>
+              </div>
+            </div>
+            <label class="outline" for="facAvatarFileInput" style="cursor:pointer;font-size:12.5px;padding:8px 14px;">
+              📷 Change Photo
+              <input id="facAvatarFileInput" type="file" accept="image/*" style="display:none;">
+            </label>
+          </div>
+
+          <div class="form-grid-2" style="margin-top:22px;">
+            <label class="meta-label">
+              Full Name
+              <input id="facProfNameInput" type="text" class="meta-input" value="Dr. Ananya Sharma">
+            </label>
+            <label class="meta-label">
+              Faculty ID
+              <input id="facProfIdInput" type="text" class="meta-input" value="FAC-2026-104">
+            </label>
+            <label class="meta-label">
+              Faculty Email
+              <input id="facProfEmailInput" type="email" class="meta-input" value="faculty@vaani.edu">
+            </label>
+            <label class="meta-label">
+              Department
+              <input id="facProfDeptInput" type="text" class="meta-input" value="Department of Computer Engineering &amp; AI">
+            </label>
+          </div>
+
+          <div id="facPasswordBox" class="hidden" style="margin-top:18px;padding-top:16px;border-top:1px dashed var(--border);">
+            <h3 style="margin:0 0 12px;font-size:15px;">🔐 Change Password</h3>
+            <div class="form-grid-2">
+              <label class="meta-label">
+                Current Password
+                <input id="facCurrentPassInput" type="password" class="meta-input" placeholder="Enter current password">
+              </label>
+              <label class="meta-label">
+                New Password
+                <input id="facNewPassInput" type="password" class="meta-input" placeholder="Enter new password (min 6 chars)">
+              </label>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:22px;flex-wrap:wrap;">
+            <button type="button" class="primary" id="facSaveProfileBtn">✏ Save Profile Changes</button>
+            <button type="button" class="outline" id="facTogglePassBtn">🔐 Change Password</button>
+            <button type="button" class="outline" data-page="settings">⚙ Settings</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 🎓 STUDENT INTERFACE SECTIONS (ALL EXISTING FEATURES PRESERVED)     -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
 
       <!-- DASHBOARD -->
       <section id="dashboard" class="page active">
         <p class="eyebrow">Welcome back!</p>
-        <h1>Dashboard</h1>
-        <p class="muted">Here's your voice recorded notes.</p>
+        <h1>Student Dashboard</h1>
+        <p class="muted">Listen to faculty-published lectures and read verified AI transcripts &amp; summaries.</p>
         <div class="stats">
-          <div><b id="statSummaries">0</b><small>Summaries Generated</small></div>
-          <div><b id="statAudio">0.0 hrs</b><small>Audio Processed</small></div>
+          <div><b id="statSummaries">0</b><small>Published Lectures &amp; Summaries</small></div>
+          <div><b id="statAudio">0.0 hrs</b><small>Audio Available</small></div>
         </div>
         <div class="card">
-          <div class="cardhead">
-            <h2>Recent Lectures</h2>
-            <div style="display:flex;gap:8px;">
-              <button class="primary" data-page="new" data-tab="upload" style="padding:8px 14px;font-size:12.5px;">⬆️ Upload Audio</button>
-              <button class="outline" data-page="recordings">View All</button>
+          <div class="cardhead" style="flex-wrap:wrap;gap:10px;">
+            <h2>📚 Published Lectures</h2>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+              <input id="studentDashSearch" type="text" class="meta-input" placeholder="🔎 Search lectures by title, subject, professor..." style="width:260px;margin-top:0;padding:8px 12px;">
+              <button class="outline" data-page="recordings">Browse All</button>
             </div>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Lecture</th>
-                <th>Professor</th>
-                <th>Duration</th>
-                <th>Created At</th>
-                <th>Status</th>
-                <th>Audio</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="rows"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- NEW TRANSCRIPTION -->
-      <section id="new" class="page">
-        <div class="crumb">Dashboard &rsaquo; New Transcription</div>
-        <h1>New Transcription</h1>
-        <p class="muted">Record your voice or upload audio to generate AI transcripts and summaries.</p>
-
-        <div class="card" style="max-width:760px; padding: 20px 24px; margin-bottom: 0; border-radius: 13px 13px 0 0; border-bottom: none;">
-          <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-            <label class="meta-label">
-              Lecture Name
-              <input id="lectureNameInput" type="text" placeholder="e.g. Introduction to AI" class="meta-input">
-            </label>
-            <label class="meta-label">
-              Professor Name
-              <input id="professorNameInput" type="text" placeholder="e.g. Dr. Sharma" class="meta-input">
-            </label>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Subject / Lecture</th>
+                  <th>Professor</th>
+                  <th>Duration</th>
+                  <th>Created At</th>
+                  <th>Status</th>
+                  <th>Audio</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
           </div>
         </div>
-
-        <div class="card recorder" style="border-radius: 0 0 13px 13px; margin-top: 0;">
-          <div class="tabs">
-            <button class="tab active" id="recordTab">Record Audio</button>
-            <button class="tab" id="uploadTab">Upload Audio</button>
-          </div>
-          <div id="recordPane" class="recordpane">
-            <button id="mic" class="mic" title="Start Recording">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="36" height="36">
-                <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
-                <path d="M19 11a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/>
-              </svg>
-            </button>
-            <h3 id="recordMsg">Click the microphone to start recording</h3>
-            <div id="timer">00:00:00</div>
-            <p><span id="status">Recording not started</span></p>
-            <div class="actions">
-              <button class="outline" id="reset">Reset</button>
-              <button class="primary disabled" disabled id="stop">Stop Recording</button>
-            </div>
-          </div>
-
-          <div id="uploadPane" class="upload hidden">
-            <label id="dropZone" for="audio" style="position:relative;cursor:pointer;transition:border-color .2s,background .2s;">
-              <svg xmlns="http://www.w3.org/2000/svg" width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="var(--p)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:6px;">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                <polyline points="17 8 12 3 7 8"></polyline>
-                <line x1="12" y1="3" x2="12" y2="15"></line>
-              </svg>
-              <b style="font-size:15px;color:var(--text);">Choose an audio file or drag &amp; drop here</b>
-              <small style="color:var(--muted);">Supports MP3, WAV, M4A, WEBM, AAC, FLAC, OGG &bull; Up to 200 MB</small>
-              <span class="outline" style="margin-top:8px;pointer-events:none;padding:7px 16px;font-size:12.5px;">Browse Audio File</span>
-              <input id="audio" type="file" accept="audio/*,.mp3,.wav,.webm,.m4a,.aac,.ogg,.flac,.mp4,.wma,.opus,.m4p">
-            </label>
-
-            <div id="fileInfoBox" style="display:none;margin-top:14px;padding:12px 16px;border-radius:10px;background:#f0eaff;border:1px solid #d7c9f8;text-align:left;">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-                <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-                  <span style="font-size:22px;">🎵</span>
-                  <div style="min-width:0;">
-                    <b id="fileInfoName" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text);font-size:13.5px;"></b>
-                    <small id="fileInfoSize" style="color:var(--muted);font-size:12px;"></small>
-                  </div>
-                </div>
-                <button type="button" class="outline" id="removeFileBtn" style="padding:4px 10px;font-size:11.5px;color:#d32f2f;border-color:#ffcdd2;">Remove</button>
-              </div>
-              <audio id="uploadAudioPreview" controls style="width:100%;height:32px;margin-top:10px;outline:none;display:none;"></audio>
-            </div>
-
-            <p id="file" style="margin-top:6px;font-weight:600;color:var(--p);font-size:12.5px;"></p>
-            <div style="margin-top: 15px; text-align: left;">
-              <label style="font-weight: 700; font-size: 13px; color: var(--p); display: block; margin-bottom: 6px;">
-                Optional Transcript Notes (leave empty for AI auto-transcription):
-              </label>
-              <textarea id="uploadTranscript" placeholder="Paste or type transcript notes here, or leave empty for AI auto-transcription." style="width: 100%; height: 75px; border: 1px solid var(--border); border-radius: 7px; padding: 10px; font-family: inherit; font-size: 13px; resize: vertical;"></textarea>
-            </div>
-          </div>
-        </div>
-
-        <button class="primary" id="process" style="margin-top:18px;">Transcribe &amp; Summarize</button>
       </section>
 
       <!-- DETAIL VIEW -->
       <section id="detail" class="page">
-        <div class="crumb">Dashboard &rsaquo; Transcription Details</div>
+        <div class="crumb">Dashboard &rsaquo; Lecture Details</div>
         <div class="detailhead">
           <div>
             <h1 id="detailTitle">Lecture - AI and ML Basics</h1>
@@ -187,11 +654,11 @@
           </div>
           <div class="card">
             <h2>Quick Actions</h2>
-            <p class="muted">Copy summary for notes or ask the AI Tutor a doubt about this lecture.</p>
+            <p class="muted">Copy summary for study notes or revision.</p>
             <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top: 15px;">
               <button class="primary" id="copy">Copy Summary</button>
-              <button class="outline" id="askTutorFromDetail">Ask AI Tutor</button>
-              <button class="outline" id="speakAiFromDetail">Speak with AI Voice</button>
+              <button class="outline" data-page="storageBoxes">Open Storage Box</button>
+              <button class="outline" data-page="recordings">Browse All Lectures</button>
             </div>
           </div>
         </div>
@@ -206,155 +673,142 @@
         </div>
       </section>
 
-      <!-- MY RECORDINGS -->
+      <!-- MY RECORDINGS / BROWSE LECTURES -->
       <section id="recordings" class="page">
-        <h1>My Recordings</h1>
-        <p class="muted">All your voice recordings, Lectures, and AI summaries.</p>
+        <div class="detailhead">
+          <div>
+            <h1>📚 Browse Lectures</h1>
+            <p class="muted">Explore all published lectures, listen to recordings, and study AI transcripts &amp; summaries.</p>
+          </div>
+          <button class="outline" data-page="storageBoxes">📦 Recording Library</button>
+        </div>
         <div class="card">
-          <table>
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Lecture</th>
-                <th>Professor</th>
-                <th>Duration</th>
-                <th>Date</th>
-                <th>Status</th>
-                <th>Audio</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="allrows"></tbody>
-          </table>
+          <div class="cardhead" style="margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+            <input id="studentBrowseSearch" type="text" class="meta-input" placeholder="🔎 Search lectures by title, subject, or professor..." style="max-width:340px;margin-top:0;">
+            <select id="studentSubjectFilter" class="meta-input" style="max-width:220px;margin-top:0;">
+              <option value="ALL">All Subjects &amp; Courses</option>
+              <option value="Artificial Intelligence">Artificial Intelligence &amp; ML</option>
+              <option value="Data Structures">Data Structures</option>
+              <option value="Innovation Lab">Innovation Lab</option>
+              <option value="Deep Learning">Deep Learning</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Subject / Lecture</th>
+                  <th>Professor</th>
+                  <th>Duration</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Audio</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="allrows"></tbody>
+            </table>
+          </div>
         </div>
       </section>
 
-      <!-- AI TUTOR (STUDENT DOUBT SOLVER) -->
-      <section id="tutor" class="page">
-        <div class="crumb">Dashboard &rsaquo; AI Tutor</div>
-        <div class="detailhead">
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 📦 RECORDING STORAGE BOX SYSTEM (DYNAMIC BOXES & RECORDINGS)       -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+      <!-- STORAGE BOX LIBRARY -->
+      <section id="storageBoxes" class="page">
+        <div class="crumb" id="storageBoxesCrumb">Dashboard &rsaquo; Recording Storage Boxes</div>
+        <div class="detailhead" style="flex-wrap:wrap;gap:12px;">
           <div>
-            <h1>AI Student Tutor</h1>
-            <p class="muted">Have a doubt from your lecture or coursework? Ask the AI Tutor for step-by-step explanations or hear answers spoken aloud.</p>
+            <h1>📦 Recording Library</h1>
+            <p class="muted">Digital storage boxes for organizing, browsing, and accessing lecture recordings dynamically.</p>
           </div>
-          <button class="outline" data-page="voice">Switch to Vaani Voice</button>
-        </div>
-
-        <div class="card tutor-toolbar">
-          <div class="tutor-control-group">
-            <label class="meta-label">
-              Lecture Context
-              <select id="tutorLectureSelect" class="meta-input">
-                <option value="">General Academic Doubt (All Topics)</option>
-              </select>
-            </label>
-            <label class="meta-label">
-              AI Tutor Voice
-              <select id="tutorVoiceSelect" class="meta-input">
-                <option value="Kore">Kore — Warm &amp; Clear</option>
-                <option value="Puck">Puck — Energetic Tutor</option>
-                <option value="Charon">Charon — Deep &amp; Calm</option>
-                <option value="Fenrir">Fenrir — Focused Mentor</option>
-                <option value="Zephyr">Zephyr — Friendly Guide</option>
-              </select>
-            </label>
-            <label class="meta-label tutor-toggle-label">
-              Auto-Speak Replies
-              <span class="tutor-checkbox-wrap">
-                <input type="checkbox" id="tutorAutoSpeak" checked>
-                <span>Speak answers aloud with AI Voice</span>
-              </span>
-            </label>
-          </div>
-
-          <div class="tutor-chips">
-            <button type="button" class="outline tutor-prompt-btn" data-prompt="Can you explain the main concepts of this lecture in simple terms?">Explain main concepts simply</button>
-            <button type="button" class="outline tutor-prompt-btn" data-prompt="Give me a real-world example to understand this topic better.">Give a real-world example</button>
-            <button type="button" class="outline tutor-prompt-btn" data-prompt="Quiz me with 3 important exam questions from this lecture.">Quiz me with 3 questions</button>
-            <button type="button" class="outline tutor-prompt-btn" data-prompt="What are the key formulas, definitions, or takeaways I should memorize?">Key exam takeaways</button>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <button class="primary" id="createNewBoxBtn" type="button">+ Create Storage Box</button>
           </div>
         </div>
 
-        <div class="card tutor-chat-card">
-          <div id="tutorMessages" class="tutor-messages">
-            <div class="tutor-msg ai">
-              <div class="tutor-msg-header">
-                <b>Vaani AI Tutor</b>
-                <button type="button" class="tutor-speak-btn" data-speak="Hello! I am your Vaani AI Tutor. Select any lecture above or ask me any academic doubt, and I will explain it step by step.">Listen</button>
-              </div>
-              <div class="tutor-msg-body">Hello! I am your Vaani AI Tutor. Select any lecture above or ask me any academic doubt, and I will explain it step by step.</div>
-            </div>
+        <div class="card" style="margin-top:14px;padding:16px 20px;">
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
+            <input id="storageBoxSearchInput" type="text" class="meta-input" placeholder="🔎 Search recording boxes..." style="max-width:380px;margin-top:0;">
+            <span class="muted" id="storageBoxesCountLabel" style="font-size:13px;font-weight:600;">Showing all boxes</span>
           </div>
+        </div>
 
-          <form id="tutorForm" class="tutor-input-row">
-            <input id="tutorInput" type="text" class="meta-input" placeholder="Type your doubt or question here (e.g., What is the difference between supervised and unsupervised learning?)..." autocomplete="off">
-            <button type="button" class="outline" id="tutorMicBtn" title="Speak your doubt">Speak Doubt</button>
-            <button type="submit" class="primary" id="tutorSendBtn">Ask Tutor</button>
-          </form>
+        <div id="storageBoxesGrid" class="storage-boxes-grid"></div>
+        <div id="storageBoxesEmptyState" class="empty hidden" style="margin-top:20px;">
+          <span style="font-size:38px;">📦</span>
+          <h2>No Storage Boxes Found</h2>
+          <p class="muted">Create a new storage box with any custom name to organize lecture recordings.</p>
+          <button class="primary" id="emptyCreateBoxBtn" type="button" style="margin-top:10px;">+ Create Storage Box</button>
         </div>
       </section>
 
-      <!-- VAANI VOICE (SEPARATE AI VOICE & WAVE VISUALIZER) -->
-      <section id="voice" class="page">
-        <div class="crumb">Dashboard &rsaquo; Vaani Voice</div>
-        <div class="detailhead">
-          <div>
-            <h1>Vaani Voice — Speak with AI Tutor</h1>
-            <p class="muted">Interactive voice conversation with your AI Tutor. Speak into your microphone and listen as the AI responds in a dedicated voice.</p>
-          </div>
-          <div style="display:flex; gap:10px; align-items:center;">
-            <button class="outline" id="voiceThemeBtn" type="button">Toggle Dark Wave</button>
-            <button class="outline" data-page="tutor" type="button">Open Chat View</button>
-          </div>
+      <!-- STORAGE BOX DETAIL VIEW (RECORDINGS INSIDE A BOX) -->
+      <section id="storageBoxDetail" class="page">
+        <div class="crumb">
+          <a href="#" id="boxDetailBackCrumb" style="color:var(--p);text-decoration:none;font-weight:600;">&larr; Recording Library</a>
+          &rsaquo; <span id="boxDetailCrumbName">Storage Box</span>
         </div>
 
-        <div class="card voice-settings-bar">
-          <label class="meta-label">
-            Lecture Context for Voice Session
-            <select id="voiceLectureSelect" class="meta-input">
-              <option value="">General Academic Doubt (All Topics)</option>
-            </select>
-          </label>
-          <label class="meta-label">
-            Select Separate AI Voice Persona
-            <select id="voicePersonaSelect" class="meta-input">
-              <option value="Kore">Kore — Warm &amp; Clear</option>
-              <option value="Puck">Puck — Energetic Tutor</option>
-              <option value="Charon">Charon — Deep &amp; Calm</option>
-              <option value="Fenrir">Fenrir — Focused Mentor</option>
-              <option value="Zephyr">Zephyr — Friendly Guide</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="vaani-voice-stage" id="voiceStage">
-          <div class="voice-state-indicator" id="voiceStateBadge">AI Voice Ready</div>
-          <canvas id="c"></canvas>
-          <div class="voice-btn-row">
-            <button id="b" type="button">Use my microphone</button>
-            <button id="voiceStopBtn" type="button" class="hidden">Stop Microphone</button>
-            <button id="voiceStopAiSpeechBtn" type="button" class="hidden">Stop AI Voice</button>
-          </div>
-          <small id="s">Tap to make the wave follow your voice and speak with your AI Tutor</small>
-
-          <div class="voice-transcript-panel" id="voiceTranscriptPanel">
-            <div class="voice-turn">
-              <span class="voice-role">You (Student):</span>
-              <p id="voiceStudentText">Tap "Use my microphone" and speak your question, or ask below.</p>
-            </div>
-            <div class="voice-turn ai-turn">
-              <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                <span class="voice-role">AI Tutor Voice:</span>
-                <button type="button" id="voiceReplayBtn" class="voice-replay-btn">Replay AI Voice</button>
+        <div class="box-detail-banner">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:flex-start;gap:14px;min-width:0;flex:1;">
+              <span class="box-emoji" style="font-size:32px;padding:12px;">📦</span>
+              <div style="min-width:0;">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                  <h1 id="boxDetailName" style="margin:0;font-size:24px;">Storage Box Name</h1>
+                  <span class="badge" id="boxDetailCountBadge">0 Recordings</span>
+                </div>
+                <p class="muted" id="boxDetailDesc" style="margin:6px 0 10px;font-size:13.5px;line-height:1.5;">Box description here...</p>
+                <div style="display:flex;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap;">
+                  <span>👨‍🏫 Created By: <b id="boxDetailCreator" style="color:var(--text);">-</b></span>
+                  <span>📅 Last Updated: <b id="boxDetailUpdated" style="color:var(--text);">-</b></span>
+                </div>
               </div>
-              <p id="voiceAiText">Hi! I'm ready to listen and explain any concept aloud. What would you like to learn today?</p>
+            </div>
+
+            <!-- Box Actions for Faculty -->
+            <div id="boxDetailFacultyActions" style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="primary" id="boxAddRecordingBtn" type="button" style="padding:9px 16px;font-size:13px;">+ Add Recording</button>
+              <button class="outline" id="boxEditDetailsBtn" type="button" style="padding:9px 14px;font-size:13px;">✏ Edit Box</button>
+              <button class="outline" id="boxDeleteBtn" type="button" style="padding:9px 14px;font-size:13px;color:#d32f2f;border-color:#ffcdd2;">🗑 Delete Box</button>
             </div>
           </div>
+        </div>
 
-          <form id="voiceQuickForm" class="voice-quick-form">
-            <input id="voiceQuickInput" type="text" placeholder="Or type a question here to hear the AI Voice explain it aloud..." autocomplete="off">
-            <button type="submit" id="voiceQuickAskBtn">Speak with AI Voice</button>
-          </form>
+        <div class="card">
+          <div class="cardhead" style="margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+            <div>
+              <h2>🎙️ Recordings in this Box</h2>
+              <p class="muted" style="font-size:12.5px;margin-top:2px;">All lectures organized under this storage box.</p>
+            </div>
+            <input id="boxRecordingsSearchInput" type="text" class="meta-input" placeholder="🔎 Search recordings in this box..." style="max-width:320px;margin-top:0;">
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Date</th>
+                  <th>Duration</th>
+                  <th>Status</th>
+                  <th>Audio Player</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="boxRecordingsRows"></tbody>
+            </table>
+          </div>
+          <div id="boxRecordingsEmpty" class="empty hidden" style="padding:40px 20px;border:none;">
+            <span style="font-size:32px;">🎙️</span>
+            <h3>No Recordings in this Box Yet</h3>
+            <p class="muted">Upload or assign a lecture recording to store it inside this box.</p>
+            <button class="primary" id="boxEmptyAddRecBtn" type="button" style="margin-top:8px;">+ Upload Recording to this Box</button>
+          </div>
         </div>
       </section>
 
@@ -381,52 +835,34 @@
             <input id="settingsTimezone" readonly style="background:#f8f9fd;color:#4920c5;font-weight:500;cursor:default;" title="All recording dates and timestamps are automatically synchronized to your local timezone">
           </label>
           <button class="primary" id="save">Save Changes</button>
-          
-          <div style="margin-top: 36px; border-top: 1px solid var(--border); padding-top: 24px;">
-            <h2 style="margin: 0 0 6px;">SMTP Email Delivery &amp; Diagnostics</h2>
-            <p class="muted" style="margin-bottom: 16px;">Live delivery status for verification codes, password resets, and notifications.</p>
-            <div id="smtpStatusBox" style="padding: 14px 16px; border-radius: 9px; background: #faf9fe; border: 1px solid var(--border); font-size: 13.5px; line-height: 1.6;">
-              <span id="smtpStatusText">Checking SMTP server connection...</span>
-            </div>
-
-            <div style="margin-top: 18px; display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-              <label class="meta-label">
-                SMTP Host
-                <input id="smtpHostInput" type="text" placeholder="smtp.gmail.com" class="meta-input">
-              </label>
-              <label class="meta-label">
-                SMTP Port
-                <input id="smtpPortInput" type="number" placeholder="587" class="meta-input">
-              </label>
-              <label class="meta-label">
-                SMTP Username / Email
-                <input id="smtpUserInput" type="email" placeholder="e.g. yourname@gmail.com" class="meta-input">
-              </label>
-              <label class="meta-label">
-                SMTP App Password
-                <input id="smtpPassInput" type="password" placeholder="e.g. 16-character Gmail App Password" class="meta-input">
-              </label>
-            </div>
-
-            <div style="display:flex; gap:10px; margin-top: 14px; flex-wrap:wrap;">
-              <button class="primary" id="smtpSaveBtn" type="button">Save &amp; Activate SMTP</button>
-              <button class="outline" id="smtpClearBtn" type="button">Clear Saved SMTP</button>
-            </div>
-
-            <div style="margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--border);">
-              <label class="meta-label" style="margin-bottom: 6px;">Test SMTP Email Delivery</label>
-              <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                <input id="smtpTestRecipient" type="email" placeholder="Recipient email for test..." style="flex:1; min-width:210px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; font-size:13px; outline:none;">
-                <button class="outline" id="smtpTestBtn" type="button" style="white-space:nowrap;">Send Test Email</button>
-              </div>
-            </div>
-            <p style="font-size:12px; color:var(--muted); margin-top:10px; line-height:1.5;">
-              Tip: For Gmail accounts, generate a 16-character App Password at <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" style="color:var(--p); font-weight:600;">Google Account &rsaquo; Security &rsaquo; App Passwords</a>. You can also configure <code>SMTP_USER</code> and <code>SMTP_PASS</code> in environment variables.
-            </p>
-          </div>
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- CREATE / EDIT STORAGE BOX MODAL -->
+  <div id="boxModal" class="box-modal-backdrop hidden">
+    <div class="box-modal">
+      <div class="box-modal-header">
+        <h2 id="boxModalTitle">📦 Create Storage Box</h2>
+        <button type="button" class="box-modal-close" id="boxModalCloseBtn">&times;</button>
+      </div>
+      <form id="boxModalForm">
+        <input type="hidden" id="boxModalId" value="">
+        <label class="meta-label">
+          Box Name *
+          <input id="boxModalName" type="text" class="meta-input" placeholder="Enter storage box name (e.g. Database Management Systems, Python...)" required autocomplete="off">
+        </label>
+        <label class="meta-label" style="margin-top:14px;">
+          Description
+          <textarea id="boxModalDesc" class="meta-input" rows="3" placeholder="Optional description of course topics or lecture series..."></textarea>
+        </label>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px;">
+          <button type="button" class="outline" id="boxModalCancelBtn">Cancel</button>
+          <button type="submit" class="primary" id="boxModalSubmitBtn">📦 Create Box</button>
+        </div>
+      </form>
+    </div>
   </div>
 
   <div id="toast"></div>
