@@ -1281,7 +1281,6 @@ function handleFacSelectedFile(file, presetDuration) {
 function clearFacSelectedFile() {
   facSelectedFile = null;
   facUploadedDuration = '00:00';
-  if (facAudioInput) facAudioInput.value = '';
   if (facFileInfoBox) facFileInfoBox.style.display = 'none';
   if (facUploadAudioPreview) {
     try { facUploadAudioPreview.pause(); } catch (e) {}
@@ -1290,44 +1289,11 @@ function clearFacSelectedFile() {
   }
 }
 
-if (facAudioInput) {
-  facAudioInput.addEventListener('change', e => {
-    if (e.target.files && e.target.files[0]) {
-      handleFacSelectedFile(e.target.files[0]);
-    }
-  });
-}
+// Removed file upload input listener as audio file upload feature is disabled.
 
-if (facRemoveFileBtn) {
-  facRemoveFileBtn.addEventListener('click', () => {
-    clearFacSelectedFile();
-    toast('Audio file removed.');
-  });
-}
+// Removed file-remove button listener as audio file upload feature is disabled.
 
-if (facDropZone) {
-  ['dragenter', 'dragover'].forEach(evt => {
-    facDropZone.addEventListener(evt, e => {
-      e.preventDefault();
-      e.stopPropagation();
-      facDropZone.style.borderColor = 'var(--p)';
-      facDropZone.style.background = '#f5f0ff';
-    });
-  });
-  ['dragleave', 'drop'].forEach(evt => {
-    facDropZone.addEventListener(evt, e => {
-      e.preventDefault();
-      e.stopPropagation();
-      facDropZone.style.borderColor = '#d7d0ec';
-      facDropZone.style.background = '';
-    });
-  });
-  facDropZone.addEventListener('drop', e => {
-    if (e.dataTransfer?.files?.length) {
-      handleFacSelectedFile(e.dataTransfer.files[0]);
-    }
-  });
-}
+// Removed dropzone listeners.
 
 function setPipelineStep(activeStep) {
   const steps = ['upload', 'stt', 'summary', 'ready'];
