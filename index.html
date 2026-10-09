@@ -8,6 +8,7 @@
   <meta property="og:title" content="Vaani — AI Voice to Text &amp; Summarizer">
   <meta property="og:description" content="AI-powered voice recording, transcription, and lecture summarization platform for students, educators, and professionals.">
   <link rel="stylesheet" href="css/style.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
   <script>
     // Auth gate — redirect to login if not authenticated
     if (!localStorage.getItem('vaani_auth_token')) {
@@ -22,41 +23,41 @@
 
       <!-- STUDENT NAVIGATION -->
       <nav id="studentNav">
-        <button class="active" data-page="dashboard">Dashboard</button>
-        <button data-page="storageBoxes">📦 Recording Library</button>
-        <button data-page="recordings">Browse Lectures</button>
-        <button data-page="settings">Settings</button>
+        <button class="active" data-page="dashboard"><i data-lucide="layout-dashboard" class="icon-default"></i> Dashboard</button>
+        <button data-page="storageBoxes"><i data-lucide="archive" class="icon-default"></i> Recording Library</button>
+        <button data-page="recordings"><i data-lucide="library" class="icon-default"></i> Browse Lectures</button>
+        <button data-page="settings"><i data-lucide="settings" class="icon-default"></i> Settings</button>
       </nav>
 
       <!-- FACULTY NAVIGATION -->
       <nav id="facultyNav" class="hidden">
-        <button class="active" data-page="facultyDashboard">📊 Dashboard</button>
-        <button data-page="storageBoxes">📦 Storage Boxes</button>
-        <button data-page="facultyLectures">📚 My Lectures</button>
-        <button data-page="facultyUpload">🎙️ Create / Upload</button>
-        <button data-page="facultyAnalytics">📈 Analytics</button>
-        <button data-page="facultyProfile">👤 Profile</button>
-        <button data-page="settings">⚙️ Settings</button>
+        <button class="active" data-page="facultyDashboard"><i data-lucide="layout-dashboard" class="icon-default"></i> Dashboard</button>
+        <button data-page="storageBoxes"><i data-lucide="archive" class="icon-default"></i> Storage Boxes</button>
+        <button data-page="facultyLectures"><i data-lucide="book-open" class="icon-default"></i> My Lectures</button>
+        <button data-page="facultyUpload"><i data-lucide="upload" class="icon-default"></i> Create Lecture</button>
+        <button data-page="facultyAnalytics"><i data-lucide="bar-chart-3" class="icon-default"></i> Analytics</button>
+        <button data-page="facultyProfile"><i data-lucide="user" class="icon-default"></i> Profile</button>
+        <button data-page="settings"><i data-lucide="settings" class="icon-default"></i> Settings</button>
       </nav>
 
-      <button class="logout" id="logout">Logout</button>
+      <button class="logout" id="logout"><i data-lucide="log-out" class="icon-default"></i> Logout</button>
     </aside>
 
     <main>
       <header>
         <span class="mobile-brand"><b>Vaani</b></span>
         <div id="studentHeaderActions" style="display:flex;align-items:center;gap:8px;">
-          <button class="outline" data-page="storageBoxes">📦 Boxes</button>
-          <button class="primary" data-page="recordings">📚 Browse Lectures</button>
+          <button class="outline" data-page="storageBoxes"><i data-lucide="archive" class="icon-primary"></i> Boxes</button>
+          <button class="primary" data-page="recordings"><i data-lucide="library" style="color:white"></i> Browse Lectures</button>
         </div>
         <div id="facultyHeaderActions" class="hidden" style="display:flex;align-items:center;gap:8px;">
-          <button class="primary" data-page="facultyUpload">+ Create / Upload</button>
-          <button class="outline" data-page="storageBoxes">📦 Storage Boxes</button>
-          <button class="outline" data-page="facultyLectures">📚 My Lectures</button>
+          <button class="primary" data-page="facultyUpload"><i data-lucide="plus" style="color:white"></i> Create Lecture</button>
+          <button class="outline" data-page="storageBoxes"><i data-lucide="archive" class="icon-primary"></i> Storage Boxes</button>
+          <button class="outline" data-page="facultyLectures"><i data-lucide="book-open" class="icon-primary"></i> My Lectures</button>
         </div>
-        <span class="role-pill" id="headerRoleBadge">🎓 Student</span>
+        <span class="role-pill" id="headerRoleBadge"><i data-lucide="user" class="icon-primary"></i> Student</span>
         <span class="profile" id="profileName">User</span>
-        <button class="outline" id="headerLogoutBtn" style="padding:9px 13px;font-size:12.5px;">Logout</button>
+        <button class="outline" id="headerLogoutBtn" style="padding:9px 13px;font-size:12.5px;"><i data-lucide="log-out" class="icon-primary"></i> Logout</button>
       </header>
 
       <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -71,27 +72,27 @@
             <h1>Faculty Dashboard</h1>
             <p class="muted">Create, review, and publish AI-processed lectures for your students.</p>
           </div>
-          <button class="primary" data-page="facultyUpload" style="font-size:14px;padding:12px 20px;">+ Upload New Lecture</button>
+          <button class="primary" data-page="facultyUpload" style="font-size:14px;padding:12px 20px;">+ Create New Lecture</button>
         </div>
 
         <div class="stats stats-4">
           <div class="stat-card">
-            <span class="stat-icon">📊</span>
+            <span class="stat-icon"><i data-lucide="bar-chart-3" class="icon-default"></i></span>
             <b id="facStatTotal">0</b>
             <small>Total Lectures</small>
           </div>
           <div class="stat-card">
-            <span class="stat-icon">✅</span>
+            <span class="stat-icon"><i data-lucide="check" class="icon-success"></i></span>
             <b id="facStatPublished">0</b>
             <small>Published Lectures</small>
           </div>
           <div class="stat-card">
-            <span class="stat-icon">📝</span>
+            <span class="stat-icon"><i data-lucide="file-pen-line" class="icon-default"></i></span>
             <b id="facStatDraft">0</b>
             <small>Draft / Ready for Review</small>
           </div>
           <div class="stat-card">
-            <span class="stat-icon">⏳</span>
+            <span class="stat-icon"><i data-lucide="loader-circle" class="icon-default"></i></span>
             <b id="facStatProcessing">0</b>
             <small>Processing Lectures</small>
           </div>
@@ -100,11 +101,11 @@
         <div class="card">
           <div class="cardhead">
             <div>
-              <h2>📚 Recent Lectures</h2>
+              <h2>Recent Lectures</h2>
               <p class="muted" style="font-size:12.5px;margin-top:2px;">Process each lecture once — all authorized students share the verified transcript and AI summary.</p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="primary" data-page="facultyUpload" style="padding:8px 14px;font-size:12.5px;">+ Upload New Lecture</button>
+              <button class="primary" data-page="facultyUpload" style="padding:8px 14px;font-size:12.5px;">+ Create New Lecture</button>
               <button class="outline" data-page="facultyLectures" style="padding:8px 14px;font-size:12.5px;">Manage All Lectures</button>
             </div>
           </div>
@@ -129,10 +130,10 @@
 
       <!-- 2. UPLOAD LECTURE (FACULTY) -->
       <section id="facultyUpload" class="page">
-        <div class="crumb">Faculty Dashboard &rsaquo; Upload New Lecture</div>
+        <div class="crumb">Faculty Dashboard &rsaquo; Create New Lecture</div>
         <div class="detailhead">
           <div>
-            <h1>🎙️ Upload New Lecture</h1>
+            <h1>🎙️ Create New Lecture</h1>
             <p class="muted">Upload a classroom lecture recording or record live. Vaani AI will automatically generate the transcript and summary for your review.</p>
           </div>
           <button class="outline" data-page="facultyLectures">📚 View My Lectures</button>
@@ -142,12 +143,12 @@
         <div class="card pipeline-card" id="facPipelineCard">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
             <b style="color:var(--p);font-size:13.5px;">🤖 AI Lecture Processing Pipeline</b>
-            <span class="badge status-badge-ready" id="facPipelineStateBadge">Ready to Upload</span>
+            <span class="badge status-badge-ready" id="facPipelineStateBadge">Ready to Create</span>
           </div>
           <div class="pipeline-steps" id="facPipelineSteps">
             <div class="pipeline-step" data-step="upload">
               <span class="step-dot">🎙️</span>
-              <b>1. Audio Uploaded</b>
+              <b>1. Audio Created</b>
               <small>MP3 / WAV / M4A</small>
             </div>
             <div class="pipeline-arrow">&rarr;</div>
@@ -213,28 +214,8 @@
           </label>
 
           <div style="margin-top:18px;">
-            <div class="tabs" style="margin-bottom:14px;max-width:380px;">
-              <button type="button" class="tab active" id="facUploadTab">📤 Upload Audio File</button>
-              <button type="button" class="tab" id="facRecordTab">🎙️ Record Lecture Live</button>
-            </div>
-
-            <!-- TAB 1: FILE UPLOAD -->
-            <div id="facUploadPane">
-              <label id="facDropZone" for="facAudioInput" class="fac-dropzone">
-                <svg xmlns="http://www.w3.org/2000/svg" width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="var(--p)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="17 8 12 3 7 8"></polyline>
-                  <line x1="12" y1="3" x2="12" y2="15"></line>
-                </svg>
-                <b style="font-size:15px;color:var(--text);">🎙 Upload Audio — Choose lecture recording or drag &amp; drop</b>
-                <small style="color:var(--muted);">Supports MP3, WAV, M4A, WEBM, AAC, FLAC, OGG &bull; Processed once for all students</small>
-                <span class="outline" style="margin-top:6px;pointer-events:none;padding:7px 16px;font-size:12.5px;">Browse Lecture Audio</span>
-                <input id="facAudioInput" type="file" accept="audio/*,.mp3,.wav,.webm,.m4a,.aac,.ogg,.flac,.mp4" style="display:none;">
-              </label>
-            </div>
-
             <!-- TAB 2: LIVE RECORDING -->
-            <div id="facRecordPane" class="card recorder hidden" style="margin-top:0;border:1px dashed #cfc5ee;">
+            <div id="facRecordPane" class="card recorder" style="margin-top:0;border:1px dashed #cfc5ee;">
               <div class="recordpane" style="padding:32px 20px;">
                 <button type="button" id="facMicBtn" class="mic" title="Start Recording Lecture">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="36" height="36">
@@ -251,20 +232,6 @@
                   <button type="button" class="outline" id="facResetRecBtn">Reset</button>
                 </div>
               </div>
-            </div>
-
-            <div id="facFileInfoBox" style="display:none;margin-top:12px;padding:12px 16px;border-radius:10px;background:#f0eaff;border:1px solid #d7c9f8;">
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-                <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-                  <span style="font-size:22px;">🎙️</span>
-                  <div style="min-width:0;">
-                    <b id="facFileInfoName" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px;"></b>
-                    <small id="facFileInfoSize" style="color:var(--muted);font-size:12px;"></small>
-                  </div>
-                </div>
-                <button type="button" class="outline" id="facRemoveFileBtn" style="padding:4px 10px;font-size:11.5px;color:#d32f2f;border-color:#ffcdd2;">Remove</button>
-              </div>
-              <audio id="facUploadAudioPreview" controls style="width:100%;height:34px;margin-top:10px;outline:none;display:none;"></audio>
             </div>
 
             <div id="facUploadErrorBox" class="hidden" style="margin-top:12px;padding:12px 16px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -348,11 +315,11 @@
           <!-- 📝 Transcript Card -->
           <div class="card review-col">
             <div class="cardhead" style="margin-bottom:12px;flex-wrap:wrap;">
-              <h2>📝 Transcript</h2>
+              <h2><i data-lucide="file-text" class="icon-default"></i> Transcript</h2>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <button type="button" class="outline" id="facRegenTranscriptBtn" style="padding:6px 10px;font-size:12px;">🔄 Generate Transcript</button>
-                <button type="button" class="outline" id="facEditTranscriptBtn" style="padding:6px 12px;font-size:12px;">✏ Edit Transcript</button>
-                <button type="button" class="primary hidden" id="facSaveTranscriptBtn" style="padding:6px 12px;font-size:12px;">💾 Save Transcript</button>
+                <button type="button" class="outline" id="facRegenTranscriptBtn" style="padding:6px 10px;font-size:12px;"><i data-lucide="refresh-cw" class="icon-default"></i> Generate Transcript</button>
+                <button type="button" class="outline" id="facEditTranscriptBtn" style="padding:6px 12px;font-size:12px;"><i data-lucide="pencil" class="icon-default"></i> Edit Transcript</button>
+                <button type="button" class="primary hidden" id="facSaveTranscriptBtn" style="padding:6px 12px;font-size:12px;"><i data-lucide="save" style="color:white"></i> Save Transcript</button>
               </div>
             </div>
             <div id="facTranscriptView" class="review-content-box"></div>
@@ -362,7 +329,7 @@
           <!-- 📄 AI Summary Card -->
           <div class="card review-col">
             <div class="cardhead" style="margin-bottom:12px;flex-wrap:wrap;">
-              <h2>📄 AI Summary</h2>
+              <h2><i data-lucide="file-text" class="icon-default"></i> AI Summary</h2>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
                 <button type="button" class="outline" id="facRegenSummaryBtn" style="padding:6px 10px;font-size:12px;">🔄 Generate Summary</button>
                 <button type="button" class="outline" id="facEditSummaryBtn" style="padding:6px 12px;font-size:12px;">✏ Edit Summary</button>
@@ -428,7 +395,7 @@
             <h1>📚 My Lectures</h1>
             <p class="muted">Manage all uploaded lectures, edit transcripts &amp; summaries, replace audio, or publish/unpublish for students.</p>
           </div>
-          <button class="primary" data-page="facultyUpload">+ Upload New Lecture</button>
+          <button class="primary" data-page="facultyUpload">+ Create New Lecture</button>
         </div>
 
         <div class="card">
@@ -807,7 +774,7 @@
             <span style="font-size:32px;">🎙️</span>
             <h3>No Recordings in this Box Yet</h3>
             <p class="muted">Upload or assign a lecture recording to store it inside this box.</p>
-            <button class="primary" id="boxEmptyAddRecBtn" type="button" style="margin-top:8px;">+ Upload Recording to this Box</button>
+            <button class="primary" id="boxEmptyAddRecBtn" type="button" style="margin-top:8px;">+ Create Recording to this Box</button>
           </div>
         </div>
       </section>
@@ -867,5 +834,6 @@
 
   <div id="toast"></div>
   <script src="js/app.js"></script>
+  <script>lucide.createIcons();</script>
 </body>
 </html>

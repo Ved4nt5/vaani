@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Vaani — Login</title>
   <link rel="stylesheet" href="css/auth.css">
+  <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
   <div class="auth-container">
@@ -17,10 +18,10 @@
       <!-- ROLE SELECTION -->
       <div class="role-selector" id="roleSelector" role="tablist" aria-label="Select Role">
         <button type="button" class="role-btn" id="roleFacultyBtn" data-role="faculty">
-          👨‍🏫 Faculty
+          <i data-lucide="user" class="icon-default"></i> Faculty
         </button>
         <button type="button" class="role-btn active" id="roleStudentBtn" data-role="student">
-          🎓 Student
+          <i data-lucide="users" class="icon-default"></i> Student
         </button>
       </div>
 
@@ -43,8 +44,8 @@
 
         <div class="auth-demo-hint" id="authDemoHint">
           <span>Quick Fill:</span>
-          <button type="button" class="demo-pill" id="fillFacultyDemo">👨‍🏫 Faculty Account</button>
-          <button type="button" class="demo-pill" id="fillStudentDemo">🎓 Student Account</button>
+          <button type="button" class="demo-pill" id="fillFacultyDemo"><i data-lucide="user" class="icon-default"></i> Faculty Account</button>
+          <button type="button" class="demo-pill" id="fillStudentDemo"><i data-lucide="users" class="icon-default"></i> Student Account</button>
         </div>
 
         <p class="auth-switch">
@@ -108,5 +109,6 @@
   </div>
 
   <script src="js/auth.js"></script>
+  <script>lucide.createIcons();</script>
 </body>
 </html>
