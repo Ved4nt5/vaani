@@ -50,6 +50,7 @@ interface User {
   department?: string;
   avatarUrl?: string;
   course?: string;
+  summaryMode?: string;
   verified: boolean;
   createdAt: Date;
 }
@@ -156,6 +157,16 @@ let storageBoxIdCounter = 1;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
+const TOKEN_SECRET = process.env.VAANI_TOKEN_SECRET || 'vaani-studio-hmac-secret-2026';
+
+const KNOWN_COURSES = new Set([
+  'se computer engineering',
+  'te computer engineering',
+  'be computer engineering',
+  'fe general engineering',
+  'm.tech ai & data science',
+]);
+
 function hashPassword(password: string): string {
   return crypto.createHash('sha256').update(password, 'utf8').digest('hex');
 }
@@ -168,8 +179,12 @@ function generateOtpCode(): string {
   return String(crypto.randomInt(100000, 1000000));
 }
 
+function signPayload(payloadB64: string): string {
+  return crypto.createHmac('sha256', TOKEN_SECRET).update(payloadB64).digest('base64url');
+}
+
 function createSessionToken(user: User): string {
-  const payload = Buffer.from(
+  const payloadB64 = Buffer.from(
     JSON.stringify({
       email: user.email,
       name: user.name,
@@ -179,8 +194,37 @@ function createSessionToken(user: User): string {
     }),
     'utf8'
   ).toString('base64url');
-  sessions.set(payload, user);
-  return payload;
+  const sig = signPayload(payloadB64);
+  const token = `${payloadB64}.${sig}`;
+  sessions.set(token, user);
+  return token;
+}
+
+function parseCookies(req: Request): Record<string, string> {
+  const raw = req.headers.cookie;
+  const out: Record<string, string> = {};
+  if (!raw) return out;
+  for (const part of raw.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx > 0) {
+      const k = part.slice(0, idx).trim();
+      const v = part.slice(idx + 1).trim();
+      try {
+        out[k] = decodeURIComponent(v);
+      } catch {
+        out[k] = v;
+      }
+    }
+  }
+  return out;
+}
+
+function setAuthCookie(res: Response, token: string) {
+  res.setHeader('Set-Cookie', `vaani_token=${encodeURIComponent(token)}; Path=/; SameSite=Lax; HttpOnly`);
+}
+
+function clearAuthCookie(res: Response) {
+  res.setHeader('Set-Cookie', 'vaani_token=; Path=/; Max-Age=0; SameSite=Lax; HttpOnly');
 }
 
 function getUserFromToken(token: string | null | undefined): User | null {
@@ -189,47 +233,45 @@ function getUserFromToken(token: string | null | undefined): User | null {
   }
   const existing = sessions.get(token);
   if (existing) {
-    return existing;
+    const dbUser = users.get(existing.email);
+    return dbUser || existing;
   }
   try {
-    const decoded = JSON.parse(Buffer.from(token, 'base64url').toString('utf8'));
-    if (decoded && decoded.email) {
-      const existingUser = users.get(decoded.email);
+    const parts = token.split('.');
+    const payloadB64 = parts[0];
+    if (parts.length === 2) {
+      const expectedSig = signPayload(payloadB64);
+      if (parts[1] !== expectedSig) {
+        return null;
+      }
+    }
+    const decoded = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
+    if (decoded && typeof decoded.email === 'string') {
+      const existingUser = users.get(decoded.email.toLowerCase());
       if (existingUser) {
-        if (decoded.role === 'faculty' || decoded.role === 'student') {
-          existingUser.role = decoded.role;
-        }
         sessions.set(token, existingUser);
         return existingUser;
       }
-      const user: User = {
-        id: userIdCounter++,
-        name: decoded.name || 'User',
-        email: decoded.email,
-        password: '',
-        role: decoded.role === 'faculty' ? 'faculty' : 'student',
-        facultyId: decoded.role === 'faculty' ? 'FAC-2026-101' : undefined,
-        department: decoded.role === 'faculty' ? 'Computer Engineering & AI' : undefined,
-        verified: true,
-        createdAt: new Date(),
-      };
-      sessions.set(token, user);
-      return user;
+      if (parts.length === 2) {
+        const user: User = {
+          id: userIdCounter++,
+          name: decoded.name || 'User',
+          email: decoded.email.toLowerCase(),
+          password: '',
+          role: decoded.role === 'faculty' ? 'faculty' : 'student',
+          facultyId: decoded.role === 'faculty' ? 'FAC-2026-101' : undefined,
+          department: decoded.role === 'faculty' ? 'Computer Engineering & AI' : undefined,
+          course: decoded.role === 'student' ? 'SE Computer Engineering' : undefined,
+          verified: true,
+          createdAt: new Date(),
+        };
+        users.set(user.email, user);
+        sessions.set(token, user);
+        return user;
+      }
     }
   } catch {
-    if (token.length >= 10) {
-      const fallbackUser: User = {
-        id: 1,
-        name: 'User',
-        email: 'programmmariojs8@gmail.com',
-        password: '',
-        role: 'student',
-        verified: true,
-        createdAt: new Date(),
-      };
-      sessions.set(token, fallbackUser);
-      return fallbackUser;
-    }
+    return null;
   }
   return null;
 }
@@ -239,8 +281,13 @@ function getAuthenticatedUser(req: Request): User | null {
   let token: string | null = null;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7).trim();
-  } else if (typeof req.query.token === 'string') {
-    token = req.query.token;
+  } else if (typeof req.query.token === 'string' && req.query.token.trim()) {
+    token = req.query.token.trim();
+  } else {
+    const cookies = parseCookies(req);
+    if (cookies.vaani_token) {
+      token = cookies.vaani_token;
+    }
   }
   return getUserFromToken(token);
 }
@@ -251,12 +298,111 @@ function requireFaculty(req: Request, res: Response): User | null {
     res.status(401).json({ error: 'Authentication required.' });
     return null;
   }
-  const roleHeader = (req.headers['x-user-role'] as string || '').toLowerCase();
-  if (user.role !== 'faculty' && roleHeader !== 'faculty') {
+  if (user.role !== 'faculty') {
     res.status(403).json({ error: 'Access denied: Faculty role required for this action.' });
     return null;
   }
   return user;
+}
+
+function isRecordingPublished(rec: Recording): boolean {
+  return rec.published === true && rec.facultyStatus === 'PUBLISHED';
+}
+
+function canUserAccessRecording(user: User | null, rec: Recording): boolean {
+  if (!user) return false;
+  if (user.role === 'faculty') return true;
+
+  // Students can only access published lectures
+  if (!isRecordingPublished(rec)) {
+    return false;
+  }
+
+  const allowed = Array.isArray(rec.allowedAccess) ? rec.allowedAccess : [];
+  if (allowed.length === 0) {
+    return false;
+  }
+
+  const allowedLower = allowed.map(a => String(a).trim().toLowerCase()).filter(Boolean);
+  if (allowedLower.includes('all')) {
+    return true;
+  }
+
+  const studentCourse = (user.course || 'SE Computer Engineering').trim().toLowerCase();
+  const specifiedCourses = allowedLower.filter(a => KNOWN_COURSES.has(a));
+
+  if (specifiedCourses.length > 0) {
+    return specifiedCourses.includes(studentCourse);
+  }
+
+  if (rec.classCourse && KNOWN_COURSES.has(rec.classCourse.trim().toLowerCase())) {
+    if (rec.classCourse.trim().toLowerCase() === studentCourse) {
+      return true;
+    }
+  }
+
+  return allowedLower.includes(studentCourse);
+}
+
+function parseDurationSeconds(dur: string | null | undefined): number {
+  if (!dur || typeof dur !== 'string') return 0;
+  const trimmed = dur.trim();
+  const minSecMatch = trimmed.match(/(\d+)\s*m\s*(\d+)\s*s/i);
+  if (minSecMatch) {
+    return parseInt(minSecMatch[1], 10) * 60 + parseInt(minSecMatch[2], 10);
+  }
+  const colonParts = trimmed.split(':').map(n => parseInt(n, 10));
+  if (colonParts.every(n => !Number.isNaN(n))) {
+    if (colonParts.length === 3) {
+      return colonParts[0] * 3600 + colonParts[1] * 60 + colonParts[2];
+    }
+    if (colonParts.length === 2) {
+      return colonParts[0] * 60 + colonParts[1];
+    }
+  }
+  return 0;
+}
+
+function formatListeningDuration(totalSeconds: number): string {
+  const safeSec = Math.max(0, Math.round(totalSeconds || 0));
+  const m = Math.floor(safeSec / 60);
+  const s = safeSec % 60;
+  return `${m}m ${String(s).padStart(2, '0')}s`;
+}
+
+function recordLecturePlayEvent(rec: Recording, user: User | null, listenedSeconds?: number) {
+  if (user && user.role === 'student' && user.email) {
+    let set = accessedStudentsPerLecture.get(rec.id);
+    if (!set) {
+      set = new Set<string>();
+      accessedStudentsPerLecture.set(rec.id, set);
+    }
+    if (!set.has(user.email)) {
+      set.add(user.email);
+      rec.studentsAccessed = (rec.studentsAccessed || 0) + 1;
+    }
+  }
+  if (!rec.studentsAccessed || rec.studentsAccessed < 1) {
+    rec.studentsAccessed = 1;
+  }
+
+  const prevPlays = typeof rec.playsCount === 'number' && rec.playsCount > 0 ? rec.playsCount : 0;
+  const prevTotalSec =
+    typeof rec.totalListeningSeconds === 'number' && rec.totalListeningSeconds >= 0
+      ? rec.totalListeningSeconds
+      : prevPlays * parseDurationSeconds(rec.avgListeningTime);
+
+  const lectureDurSec = parseDurationSeconds(rec.duration);
+  const eventSec =
+    typeof listenedSeconds === 'number' && listenedSeconds > 0
+      ? listenedSeconds
+      : lectureDurSec > 0
+      ? lectureDurSec
+      : 60;
+
+  rec.playsCount = prevPlays + 1;
+  rec.totalListeningSeconds = prevTotalSec + eventSec;
+  rec.avgListeningTime = formatListeningDuration(rec.totalListeningSeconds / rec.playsCount);
 }
 
 function formatDateTime(date: Date, userTz?: string): string {
@@ -333,9 +479,11 @@ function stripModelLine(text: string): string {
     .trim();
 }
 
-function toStorageBoxDto(box: StorageBox, userTz?: string): StorageBoxResponseDto {
+function toStorageBoxDto(box: StorageBox, userTz?: string, user?: User | null): StorageBoxResponseDto {
   const allRecs = Array.from(recordings.values()).filter(r => r.storageBoxId === box.id);
-  const publishedRecs = allRecs.filter(r => r.published === true || r.facultyStatus === 'PUBLISHED');
+  const publishedRecs = allRecs.filter(r =>
+    user && user.role === 'student' ? canUserAccessRecording(user, r) : isRecordingPublished(r)
+  );
   const updatedDate = box.updatedAt instanceof Date ? box.updatedAt : new Date(box.updatedAt || Date.now());
   const createdDate = box.createdAt instanceof Date ? box.createdAt : new Date(box.createdAt || Date.now());
 
@@ -354,22 +502,26 @@ function toStorageBoxDto(box: StorageBox, userTz?: string): StorageBoxResponseDt
 }
 
 function toRecordingDto(recording: Recording, userTz?: string): RecordingResponseDto {
-  // Auto-heal any recording that has missing or error text
-  if (isBrokenOrErrorText(recording.transcript)) {
-    recording.transcript = generateTranscript(
-      null,
-      recording.audioFilename,
-      recording.title,
-      recording.lectureName || recording.subject || undefined,
-      recording.professorName || undefined
-    );
+  const isDraft = recording.facultyStatus === 'DRAFT' || recording.status === 'Draft';
+  const isProcessing = recording.facultyStatus === 'PROCESSING' || recording.status === 'Processing';
+  const isFailed = recording.status === 'Failed';
+
+  if (!isDraft && !isProcessing && !isFailed) {
+    if (isBrokenOrErrorText(recording.transcript)) {
+      recording.transcript = generateTranscript(
+        null,
+        recording.audioFilename,
+        recording.title,
+        recording.lectureName || recording.subject || undefined,
+        recording.professorName || undefined
+      );
+    }
+    if (isBrokenOrErrorText(recording.summary)) {
+      recording.summary = generateSummary(recording.transcript, 'Medium');
+    }
   }
-  if (isBrokenOrErrorText(recording.summary)) {
-    recording.summary = generateSummary(recording.transcript, 'Medium');
-  }
-  recording.summary = stripModelLine(recording.summary);
-  if (recording.status === 'Failed' || (recording.status === 'Processing' && recording.facultyStatus !== 'PROCESSING')) {
-    recording.status = 'Completed';
+  if (recording.summary) {
+    recording.summary = stripModelLine(recording.summary);
   }
 
   const hasAudio = Boolean(recording.audioData && recording.audioData.length > 0);
@@ -384,33 +536,61 @@ function toRecordingDto(recording: Recording, userTz?: string): RecordingRespons
     }
   }
 
+  const facultyStatus: 'DRAFT' | 'PROCESSING' | 'READY' | 'PUBLISHED' =
+    recording.facultyStatus || (recording.published === true ? 'PUBLISHED' : 'READY');
+  const isPublished = facultyStatus === 'PUBLISHED' && recording.published !== false;
+  recording.facultyStatus = facultyStatus;
+  recording.published = isPublished;
+
+  let resolvedStatus = recording.status || 'Completed';
+  if (isFailed) {
+    resolvedStatus = 'Failed';
+  } else if (isProcessing) {
+    resolvedStatus = 'Processing';
+  } else if (facultyStatus === 'DRAFT') {
+    resolvedStatus = 'Draft';
+  } else if (hasAudio && recording.transcript && recording.summary) {
+    resolvedStatus = 'Completed';
+  }
+
+  const studentsAccessed = typeof recording.studentsAccessed === 'number' && recording.studentsAccessed >= 0
+    ? recording.studentsAccessed
+    : 0;
+  const playsCount = typeof recording.playsCount === 'number' && recording.playsCount >= 0
+    ? recording.playsCount
+    : 0;
+  const avgListeningTime =
+    playsCount > 0 && studentsAccessed > 0 && recording.avgListeningTime && recording.avgListeningTime !== '00m 00s'
+      ? recording.avgListeningTime
+      : '0m 00s';
+
   return {
     id: recording.id,
     storageBoxId: recording.storageBoxId || null,
     storageBoxName: boxName,
     title: recording.title,
     lectureName: recording.lectureName || recording.subject || null,
-    professorName: recording.professorName,
+    professorName: recording.professorName || 'Faculty',
     subject: recording.subject || boxName || recording.lectureName || 'General Studies',
     classCourse: recording.classCourse || 'SE Computer Engineering',
     lectureDate: recording.lectureDate || isoStr.slice(0, 10),
     description: recording.description || '',
-    duration: recording.duration,
+    duration: recording.duration || '00:00',
     createdAt: recording.createdAt ? formatDateTime(createdAtDate, userTz) : 'Just now',
     createdAtIso: isoStr,
     timestamp: createdAtDate.getTime(),
-    status: recording.status || 'Completed',
-    facultyStatus: recording.facultyStatus || (recording.published !== false ? 'PUBLISHED' : 'READY'),
-    published: recording.published !== false,
+    status: resolvedStatus,
+    facultyStatus,
+    published: isPublished,
     isFacultyLecture: Boolean(recording.isFacultyLecture),
-    allowedAccess: Array.isArray(recording.allowedAccess) && recording.allowedAccess.length > 0
+    allowedAccess: Array.isArray(recording.allowedAccess)
       ? recording.allowedAccess
       : ['SE Computer Engineering', 'Data Structures', 'AI & Machine Learning'],
-    studentsAccessed: typeof recording.studentsAccessed === 'number' ? recording.studentsAccessed : 28,
-    playsCount: typeof recording.playsCount === 'number' ? recording.playsCount : 64,
-    avgListeningTime: recording.avgListeningTime || '34m 20s',
-    transcript: recording.transcript,
-    summary: recording.summary,
+    studentsAccessed,
+    playsCount,
+    avgListeningTime,
+    transcript: recording.transcript || '',
+    summary: recording.summary || '',
     hasAudio,
     audioUrl: hasAudio ? `/api/recordings/${recording.id}/audio` : null,
   };
@@ -585,8 +765,9 @@ async function transcribeAudioBuffer(
       const base64Audio = audioBuffer.toString('base64');
       const topicHint = [lectureName, title, professorName].filter(Boolean).join(' - ');
       const candidateModels = [
+        'gemini-2.5-flash',
+        'gemini-3-flash-preview',
         'gemini-3.1-flash-lite',
-        'gemini-3.8-flash',
       ];
 
       for (const modelName of candidateModels) {
@@ -673,7 +854,7 @@ async function generateAiSummary(transcript: string, mode = 'Medium'): Promise<s
         ? 'Provide a comprehensive 4-sentence executive summary and 5-6 detailed bullet points.'
         : 'Provide a concise 2-3 sentence executive summary and 3-4 key bullet points.';
 
-    const summaryModels = ['gemini-3.1-flash-lite', 'gemini-3.8-flash'];
+    const summaryModels = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'];
     for (const modelName of summaryModels) {
       try {
         const summaryCall = ai.models.generateContent({
