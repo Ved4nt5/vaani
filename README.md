@@ -1,194 +1,137 @@
-# Vaani — AI Voice to Text & Summarizer 🎙️✨
+# Vaani — Academic Lecture Capture, Transcription & AI Summarization Platform 🎙️🎓
 
-**Vaani** is an AI-powered voice recording, transcription, and lecture summarization platform. It enables students, educators, and professionals to record voice notes or upload audio files, automatically generate speech-to-text transcripts using Whisper AI, and receive concise, structured summaries with key takeaways.
+**Vaani** is a role-based academic platform built for educators and students. It allows **Faculty** to record live classroom lectures directly in the browser, organize courses into custom **Storage Boxes**, automatically generate speech-to-text transcripts and structured AI study summaries, and verify content before publishing it to **Students**.
 
 ---
 
-## 🚀 Key Features
+## ✨ Key Features
 
-- **Email OTP Authentication**:
-  - **First-time Users (Sign Up)**: Register with name, email, and password. A secure 6-digit passcode (OTP) is sent directly to your Gmail. Enter the passcode to verify your account and gain access.
-  - **Returning Users (Login)**: Sign in directly using your registered email and password.
-  - **Session Security**: Bearer token session authentication with instant logout support.
-- **Voice Recording & Audio Upload**:
-  - In-browser live microphone recording with audio visual timer.
-  - Audio file upload support (`.mp3`, `.wav`, `.webm`, `.m4a` up to 200 MB).
-- **AI Speech-to-Text Transcription**:
-  - Integrated with OpenAI Whisper / Groq Whisper API, with fallback to local Whisper model or custom notes.
-- **AI Summarization & Analytics**:
-  - Executive summary generation.
-  - Key points and actionable insights extraction.
-  - Tagging, keyword extraction, word counts, and estimated reading time.
-- **Audio Playback & Library**:
-  - In-browser audio streaming and playback.
-  - Download recorded audio in `.webm` format.
-  - Lecture and professor metadata tracking.
-  - Browser local storage fallback mode if backend services are offline.
+### 1. Role-Based Access Control (Faculty vs. Student)
+- **Dual-Role Authentication**: Dedicated interfaces, navigation, and permission sets for **Faculty** and **Student** accounts.
+- **Email OTP Verification**: 6-digit one-time passcode verification sent via Gmail SMTP (5-minute TTL) for new user signups.
+- **Session Security**: SHA-256 password hashing and Bearer token session management with instant revocation on logout.
+- **Strict Permission Enforcement**: Only Faculty can record, edit, organize, and publish content; Students receive a clean, distraction-free read-and-listen workspace.
+
+### 2. Dynamic Storage Box System
+- **Custom Subject & Course Containers**: Faculty can create, rename, edit, and delete Storage Boxes for any custom subject or course (no rigid predefined categories).
+- **Structured Lecture Grouping**: Assign lectures directly to a Storage Box during creation or reorganize them across boxes at any time.
+- **Search & Browsing**: Both Faculty and Students can search Storage Boxes by name or description and view lecture counts and last-updated dates.
+
+### 3. Faculty Workspace (Creation, Review & Publishing)
+- **Live Classroom Audio Recording**: Record lectures directly from the browser microphone using the HTML5 `MediaRecorder` API with a live timer (`Start`, `Stop`, and `Reset` controls).
+- **Automated AI Processing Pipeline**:
+  1. **Audio Capture**: Captures live recorded classroom audio.
+  2. **Speech-to-Text Transcription**: Automatically generates a clean, structured lecture transcript.
+  3. **AI Lecture Summarization**: Generates structured academic study notes, executive overviews, and key takeaways.
+- **Review, Edit & Regeneration**: Faculty can manually edit transcripts and summaries or trigger on-demand AI regeneration before publishing.
+- **Publish & Batch Access Control**: Toggle lectures between `DRAFT`, `READY`, and `PUBLISHED` states and configure which classes or student batches have access.
+- **Engagement Analytics**: Track total lectures, published count, number of students who accessed each lecture, total audio plays, and average listening time.
+- **Faculty Profile Management**: Manage academic credentials, department info, profile photo, and account password.
+
+### 4. Student Workspace (Study & Playback)
+- **Read & Listen-Only Interface**: Clean academic portal displaying only published lectures and Storage Boxes.
+- **In-Browser Audio Streaming & Download**: Stream lecture recordings via the built-in audio player or download audio files for offline listening.
+- **Verified Transcripts & AI Summaries**: Tabbed lecture detail view with the faculty-verified transcript, structured AI summary, and lecture metadata.
+- **Quick Study Tools**: One-click **Copy Summary** for revision notes and fast filtering by title, subject, or professor name.
+
+---
+
+## 🏗️ System Architecture
+
+```
++-------------------------------------------------------------------+
+|                           Client Layer                            |
+|                                                                   |
+|  +-----------------------------+   +---------------------------+  |
+|  |      Faculty Interface      |   |     Student Interface     |  |
+|  | - Live Audio Recording      |   | - Storage Box Browsing    |  |
+|  | - Storage Box Management    |   | - Lecture Audio Playback  |  |
+|  | - Transcript/Summary Review |   | - Transcript & Notes View |  |
+|  | - Access & Publish Control  |   | - Search & Filtering      |  |
+|  +--------------+--------------+   +-------------+-------------+  |
++-----------------|--------------------------------|----------------+
+                  |                                |
+                  +---------------+----------------+
+                                  |
+                         REST API / HTTP
+                                  |
++---------------------------------v---------------------------------+
+|                        Application Server                         |
+|                                                                   |
+|  +----------------------+  +-----------------+  +--------------+  |
+|  | Auth & Role Guard    |  | Lecture Manager |  | Box Manager  |  |
+|  | (Faculty vs Student) |  | (CRUD & Status) |  | (Grouping)   |  |
+|  +----------------------+  +--------+--------+  +--------------+  |
+|                                     |                             |
+|                            +--------v--------+                    |
+|                            |   AI Pipeline   |                    |
+|                            | - Transcription |                    |
+|                            | - Summarization |                    |
+|                            +--------+--------+                    |
++-------------------------------------|-----------------------------+
+                                      |
+                  +-------------------+-------------------+
+                  |                                       |
++-----------------v-----------------+   +-----------------v-----------------+
+|          Storage Layer            |   |        External AI Service        |
+|                                   |   |                                   |
+| - User Accounts & Roles           |   | - Speech-to-Text Processing       |
+| - Storage Boxes & Metadata        |   | - Lecture Summary Generation      |
+| - Lecture Audio Streams           |   |                                   |
+| - Verified Transcripts & Notes    |   |                                   |
++-----------------------------------+   +-----------------------------------+
+```
 
 ---
 
 ## 🛠️ Tech Stack
 
-- **Backend**:
-  - Java 21 & Spring Boot 3.2.5
-  - Spring Data JPA & Hibernate
-  - Spring Boot Starter Mail (Gmail SMTP integration)
-  - H2 embedded database (file-persisted at `./data/vaanidb`) or MySQL
-- **Frontend**:
-  - Clean, modern UI (Vanilla JavaScript, HTML5, CSS3)
-  - HTML5 MediaRecorder API & Audio Player
-- **Speech & AI**:
-  - Python Whisper (`faster-whisper`) / OpenAI Whisper API / Groq API
+### Frontend
+- **Markup & Structure**: HTML5 (`index.html`, `login.html`)
+- **Styling**: Custom CSS3 (Responsive Layout, Academic Blue/Slate/Green Theme)
+- **Client Logic**: Vanilla JavaScript (ES6+) (`js/app.js`, `js/auth.js`)
+- **Audio Capture & Playback**: Web Audio API & MediaStream Recording API (`MediaRecorder`)
+- **Iconography**: Lucide Outline Icons
+
+### Backend
+- **Runtime Environment**: Node.js
+- **Web Framework**: Express.js
+- **Language**: TypeScript (`tsx` execution runtime)
+- **Authentication**: Token-based Session Management & Role-Based Access Control (RBAC)
+- **Email Service**: Nodemailer (Gmail SMTP for 6-digit OTP verification)
+
+### AI & Processing
+- **Capabilities**: Automated Speech-to-Text Transcription & Academic Lecture Summarization
+
+### Data & Database Architecture
+- **Relational Database (SQL)**: **H2 Embedded SQL Database** / **MySQL** (for relational entity persistence of Users, OTPs, Storage Boxes, and Lecture Recordings)
+- **In-Memory Cache & Runtime Store**: **In-Memory Key-Value Store** (Redis-style in-memory `Map` & `Set` collections for fast session token lookups, OTP TTL tracking, and active runtime state)
+- **Database Entities**:
+  - **Users**: Stores user credentials, SHA-256 hashed passwords, roles (`faculty` / `student`), department info, and verification status.
+  - **Sessions & OTPs**: Manages active Base64URL session tokens, revoked tokens, and 5-minute TTL OTP verification codes.
+  - **Storage Boxes**: Stores dynamic subject/course containers, descriptions, creator metadata, and timestamps.
+  - **Recordings**: Stores lecture metadata, processing status (`DRAFT`, `PROCESSING`, `READY`, `PUBLISHED`), verified transcripts, AI summaries, batch access permissions, analytics counters, and binary audio streams (`BLOB` / `Buffer`).
+- **Client-Side Storage**: Browser `localStorage` for persisting authentication tokens, active user role, and session state.
 
 ---
 
 ## 📂 Project Structure
 
 ```
-vaani-main/
-├── backend/
-│   ├── src/main/java/com/vaani/
-│   │   ├── VaaniApplication.java
-│   │   ├── config/
-│   │   │   ├── AuthFilter.java          # Bearer token verification filter
-│   │   │   ├── DatabaseSeeder.java      # Sample lectures seeder
-│   │   │   └── WebConfig.java           # CORS & static route handler
-│   │   ├── controller/
-│   │   │   ├── AuthController.java      # Signup, OTP verify, Login, Logout APIs
-│   │   │   └── RecordingController.java # CRUD endpoints for audio recordings
-│   │   ├── dto/
-│   │   │   └── RecordingResponseDto.java
-│   │   ├── model/
-│   │   │   ├── Otp.java                 # OTP verification model (5-min TTL)
-│   │   │   ├── Recording.java           # Audio & transcript entity
-│   │   │   └── User.java                # User credentials & verification status
-│   │   ├── repository/
-│   │   │   ├── OtpRepository.java
-│   │   │   ├── RecordingRepository.java
-│   │   │   └── UserRepository.java
-│   │   └── service/
-│   │       ├── AIService.java           # Summary & NLP analytics engine
-│   │       ├── AuthService.java         # Password hashing & auth workflow
-│   │       ├── EmailService.java        # Gmail SMTP mail sender
-│   │       ├── RecordingService.java    # Recording storage & async worker
-│   │       └── WhisperService.java      # Speech-to-text runner
-│   ├── src/main/resources/
-│   │   └── application.properties       # Database, mail, and server config
-│   ├── pom.xml
-│   └── transcribe_whisper.py            # Local Whisper Python script
+vaani/
 ├── css/
-│   ├── auth.css                         # Styles for login & signup forms
-│   └── style.css                        # Dashboard & recorder styles
+│   ├── auth.css              # Styles for Faculty/Student login, signup & OTP forms
+│   └── style.css             # Academic dashboard, Storage Boxes & recorder styles
 ├── js/
-│   ├── auth.js                          # Login, signup & OTP frontend logic
-│   └── app.js                           # Dashboard, recording, and player logic
-├── index.html                           # Main dashboard & recording workspace
-├── login.html                           # Login / Signup / OTP verification page
-├── start-services.sh                    # Service launch script
-├── vaani.png                            # Project logo
-└── README.md
-```
-
----
-
-## ⚙️ Configuration & Gmail Setup
-
-To send OTP verification emails to users' Gmail accounts, configure a **Gmail App Password**:
-
-### 1. Generate a Gmail App Password
-1. Go to your [Google Account Security Settings](https://myaccount.google.com/security).
-2. Ensure **2-Step Verification** is turned **ON**.
-3. Under *2-Step Verification*, navigate to **App passwords** (or search for "App passwords" in the search bar).
-4. Enter an app name (e.g., `Vaani`) and click **Create**.
-5. Copy the generated 16-character password (e.g., `abcd efgh ijkl mnop`).
-
-### 2. Configured Gmail Credentials
-The application is pre-configured with your Gmail credentials in `backend/src/main/resources/application.properties`:
-- **Sender Email**: `programmmariojs8@gmail.com`
-- **SMTP Server**: `smtp.gmail.com:587` (STARTTLS enabled)
-
-You can also override them anytime via environment variables:
-```bash
-export VAANI_MAIL_USERNAME="programmmariojs8@gmail.com"
-export VAANI_MAIL_PASSWORD="your-app-password"
-```
-
-*(Optional) If using OpenAI or Groq for speech recognition:*
-```bash
-export GROQ_API_KEY="your-groq-api-key"
-# or
-export OPENAI_API_KEY="your-openai-api-key"
-```
-
-> **Development Note**: Every time an OTP is generated, the 6-digit passcode is also displayed directly in the backend terminal logs (`Vaani Verification Code for [email]: XXXXXX`) for instant visibility and testing.
-
----
-
-## 🏃 Quick Start
-
-### 1. Prerequisites
-- **Java 21** or higher
-- **Maven 3.8+**
-- (Optional) **Python 3.9+** with `faster-whisper` for offline local transcription
-
-### 2. Run the Application
-You can run the startup script from the root directory:
-
-```bash
-./start-services.sh
-```
-
-Or run via Maven inside `backend/`:
-
-```bash
-cd backend
-mvn spring-boot:run
-```
-
-### 3. Open the App in Browser
-Navigate to:
-- **Login / Signup**: [http://localhost:8080/login](http://localhost:8080/login) or [http://localhost:8080/login.html](http://localhost:8080/login.html)
-- **Main Dashboard**: [http://localhost:8080](http://localhost:8080) *(automatically redirects to login if unauthenticated)*
-
----
-
-## 🔐 How Authentication Works
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant Frontend as Vaani Frontend
-    participant Auth as AuthController / AuthService
-    participant Email as EmailService (Gmail SMTP)
-    participant DB as H2 / MySQL Database
-
-    rect rgb(240, 240, 255)
-    note over User, DB: First Time User (Sign Up)
-    User->>Frontend: Enter Name, Email, Password & click "Sign Up"
-    Frontend->>Auth: POST /api/auth/signup
-    Auth->>DB: Save unverified User (SHA-256 hashed password)
-    Auth->>DB: Generate & save 6-digit OTP (5 min expiry)
-    Auth->>Email: sendOtpEmail(email, otpCode)
-    Email-->>User: Delivers passcode to user's Gmail
-    Auth-->>Frontend: 200 OK ("Verification code sent")
-    Frontend->>User: Displays 6-digit OTP input form
-    User->>Frontend: Enters passcode received in Gmail
-    Frontend->>Auth: POST /api/auth/verify-otp { email, code }
-    Auth->>DB: Check OTP match & expiry
-    Auth->>DB: Mark User.verified = true
-    Auth-->>Frontend: Returns session token & user profile
-    Frontend->>User: Redirects to Dashboard
-    end
-
-    rect rgb(240, 255, 240)
-    note over User, DB: Returning User (Login)
-    User->>Frontend: Enter Email + Password & click "Login"
-    Frontend->>Auth: POST /api/auth/login
-    Auth->>DB: Find verified user & compare password hash
-    Auth-->>Frontend: Returns session token & user profile
-    Frontend->>User: Redirects to Dashboard
-    end
+│   ├── auth.js               # Role-based login, signup & OTP frontend logic
+│   └── app.js                # Faculty & Student workspace, Storage Boxes, recorder & player
+├── index.html                # Main application workspace (Faculty & Student views)
+├── login.html                # Role-based Login / Signup / OTP verification page
+├── server.ts                 # Express TypeScript server, REST APIs, Auth & AI pipeline
+├── package.json              # Dependencies and scripts
+├── tsconfig.json             # TypeScript configuration
+├── vaani.png                 # Project logo
+└── README.md                 # Project documentation
 ```
 
 ---
@@ -197,25 +140,34 @@ sequenceDiagram
 
 ### Authentication Endpoints
 
-| Method | Endpoint | Description | Request Body |
+| Method | Endpoint | Access | Description |
 |---|---|---|---|
-| `POST` | `/api/auth/signup` | Register new user & send OTP to Gmail | `{"name":"string", "email":"string", "password":"string"}` |
-| `POST` | `/api/auth/verify-otp` | Verify 6-digit code and activate user | `{"email":"string", "code":"123456"}` |
-| `POST` | `/api/auth/login` | Log in existing verified user | `{"email":"string", "password":"string"}` |
-| `GET` | `/api/auth/me` | Fetch currently logged-in user profile | Requires `Authorization: Bearer <token>` |
-| `POST` | `/api/auth/logout` | Invalidate current user session | Requires `Authorization: Bearer <token>` |
+| `POST` | `/api/auth/signup` | Public | Register a new Faculty or Student account & send 6-digit OTP |
+| `POST` | `/api/auth/verify-otp` | Public | Verify 6-digit OTP code and activate user session |
+| `POST` | `/api/auth/resend-otp` | Public | Resend a fresh 6-digit OTP code |
+| `POST` | `/api/auth/login` | Public | Log in existing verified user (`faculty` or `student`) |
+| `GET` | `/api/auth/me` | Authenticated | Fetch currently logged-in user profile and role |
+| `POST` | `/api/auth/logout` | Authenticated | Invalidate current user session token |
 
-### Recordings Endpoints
+### Storage Box Endpoints
 
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/recordings` | List all recordings (requires auth) |
-| `GET` | `/api/recordings/{id}` | Get specific recording details (requires auth) |
-| `GET` | `/api/recordings/{id}/audio` | Stream or download recording audio file |
-| `POST` | `/api/recordings` | Upload audio and trigger AI transcription |
-| `DELETE` | `/api/recordings/{id}` | Delete a recording (requires auth) |
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/boxes` | Faculty & Student | List all Storage Boxes with lecture counts |
+| `POST` | `/api/boxes` | Faculty Only | Create a new custom Storage Box |
+| `PUT` | `/api/boxes/:id` | Faculty Only | Rename or update a Storage Box description |
+| `DELETE` | `/api/boxes/:id` | Faculty Only | Delete a Storage Box |
 
----
+### Lecture Recording Endpoints
 
-## 📄 License
-This project is open source and available under the [MIT License](LICENSE).
+| Method | Endpoint | Access | Description |
+|---|---|---|---|
+| `GET` | `/api/recordings` | Faculty & Student | List lectures (Faculty sees all; Students see `PUBLISHED` only) |
+| `GET` | `/api/recordings/:id` | Faculty & Student | Get full lecture details, transcript, summary, and analytics |
+| `GET` | `/api/recordings/:id/audio` | Faculty & Student | Stream or download recorded classroom audio |
+| `POST` | `/api/recordings` | Faculty Only | Save recorded audio & trigger AI transcription/summarization |
+| `PUT` | `/api/recordings/:id` | Faculty Only | Update lecture metadata, edited transcript/summary, or box assignment |
+| `POST` | `/api/recordings/:id/publish` | Faculty Only | Publish or unpublish a lecture for students |
+| `POST` | `/api/recordings/:id/regenerate` | Faculty Only | Regenerate AI transcript or summary on demand |
+| `DELETE` | `/api/recordings/:id` | Faculty Only | Delete a lecture recording |
+
