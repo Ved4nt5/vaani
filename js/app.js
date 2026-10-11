@@ -155,7 +155,7 @@ let currentReviewRecording = null;
 
 function isBrokenText(text) {
   if (!text || !String(text).trim()) return true;
-  const lower = String(text).toLowerCase();
+  const lower = String(text).toLowerCase().trim();
   return (
     lower.includes('openai whisper could not transcribe') ||
     lower.includes('http 429') ||
@@ -164,53 +164,54 @@ function isBrokenText(text) {
     lower.includes('no summary available') ||
     lower.includes('check your api key, account billing') ||
     lower.includes('local mode: transcript is not auto-generated') ||
-    lower.includes('local mode summary:')
+    lower.includes('local mode summary:') ||
+    lower.includes('in this lecture, we explore the core principles, foundational architecture, and practical real-world implementations of') ||
+    lower.includes('first, we examine how modern systems process input data, structure key representations, and optimize performance under real-world constraints') ||
+    lower.includes('second, we walk through concrete case studies and step-by-step methodologies')
   );
 }
 
-function buildFallbackTranscript(rec) {
-  const subject = rec.subject || rec.lectureName || rec.title || 'Voice Recording';
-  const prof = rec.professorName ? ` led by ${rec.professorName}` : '';
-  return (
-    `Welcome everyone to today's session on ${subject}${prof}. ` +
-    `In this lecture, we explore the core principles, foundational architecture, and practical real-world implementations of ${subject}.\n\n` +
-    `First, we examine how modern systems process input data, structure key representations, and optimize performance under real-world constraints. ` +
-    `Understanding the trade-offs between accuracy, latency, and scalability is essential when designing reliable solutions.\n\n` +
-    `Second, we walk through concrete case studies and step-by-step methodologies. ` +
-    `Please review these key takeaways and action items before our next discussion session.`
-  );
-}
-
-function buildFallbackSummary(transcript) {
+function buildExtractiveSummaryFromTranscript(transcript) {
   const cleaned = (transcript || '').trim();
-  const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
-  const exec = sentences.length <= 2
-    ? cleaned
-    : `${sentences[0]} ${sentences[Math.floor(sentences.length / 2)]} ${sentences[sentences.length - 1]}`;
-  const keyPoints = sentences.slice(0, Math.min(4, sentences.length)).map(s => `• ${s.trim()}`).join('\n');
-  const stopWords = new Set(['the','and','is','in','to','of','for','with','on','at','from','by','this','that','are','was','were','been','has','have','had','will','would','could','should','your','our','their','more','also','some','into','welcome','everyone','today','session']);
+  if (!cleaned || isBrokenText(cleaned)) {
+    return '';
+  }
+  const sentences = cleaned.split(/(?<=[.!?])\s+|\n+/).map(s => s.trim()).filter(s => s.length > 4);
+  if (sentences.length === 0) return '';
+
+  const stopWords = new Set(['the','and','is','in','to','of','for','with','on','at','from','by','this','that','are','was','were','been','has','have','had','will','would','could','should','your','our','their','more','also','some','into','welcome','everyone','today','session','lecture']);
   const counts = {};
   for (const w of cleaned.toLowerCase().split(/\W+/)) {
     if (w.length > 3 && !stopWords.has(w)) counts[w] = (counts[w] || 0) + 1;
   }
-  const keywords = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5).map(e => e[0]);
-  const wordCount = cleaned.split(/\s+/).filter(Boolean).length;
-  const readingTimeSec = Math.ceil(wordCount / 3.3);
+  const keywords = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6).map(e => e[0]);
 
-  return [
-    '✥ EXECUTIVE SUMMARY',
-    exec,
+  const overview = sentences.length <= 2
+    ? sentences.join(' ')
+    : `${sentences[0]} ${sentences[1]}`;
+  const keyConcepts = sentences.slice(0, Math.min(5, sentences.length)).map(s => `• ${s}`).join('\n');
+  const takeaways = sentences.slice(-Math.min(3, sentences.length)).map(s => `• ${s}`).join('\n');
+
+  const lines = [
+    '1. Lecture Overview',
+    overview,
     '',
-    '✥ KEY POINTS & INSIGHTS',
-    keyPoints,
-    '',
-    '✥ MAIN TOPICS & KEYWORDS',
-    'Tags: ' + (keywords.length ? keywords.join(', ') : 'lecture, notes, summary'),
-    '',
-    '✥ ANALYTICS',
-    `• Total Words: ${wordCount}`,
-    `• Estimated Reading Time: ~${readingTimeSec} seconds`
-  ].join('\n');
+    '2. Key Concepts',
+    keyConcepts,
+  ];
+  if (keywords.length > 0) {
+    lines.push(`• Core Terminology: ${keywords.join(', ')}`);
+  }
+  if (sentences.length > 2) {
+    lines.push('');
+    lines.push('3. Detailed Notes');
+    lines.push(sentences.slice(0, Math.min(6, sentences.length)).map(s => `• ${s}`).join('\n'));
+  }
+  lines.push('');
+  lines.push(`${sentences.length > 2 ? '4' : '3'}. Key Takeaways`);
+  lines.push(takeaways);
+
+  return lines.join('\n');
 }
 
 function stripModelLine(text) {
@@ -223,20 +224,14 @@ function stripModelLine(text) {
 
 function sanitizeRecording(rec) {
   if (!rec || typeof rec !== 'object') return rec;
-  if (rec.status !== 'Processing') {
-    if (isBrokenText(rec.transcript)) {
-      rec.transcript = buildFallbackTranscript(rec);
-    }
-    if (isBrokenText(rec.summary)) {
-      rec.summary = buildFallbackSummary(rec.transcript);
-    }
+  if (rec.summary) {
     rec.summary = stripModelLine(rec.summary);
-    if (rec.status === 'Failed') {
-      rec.status = 'Completed';
-    }
-  } else if (!isBrokenText(rec.transcript) && !isBrokenText(rec.summary)) {
-    rec.summary = stripModelLine(rec.summary);
-    rec.status = 'Completed';
+  }
+  if (isBrokenText(rec.transcript)) {
+    rec.transcript = '';
+  }
+  if (isBrokenText(rec.summary)) {
+    rec.summary = rec.transcript ? buildExtractiveSummaryFromTranscript(rec.transcript) : '';
   }
   if (!rec.facultyStatus) {
     rec.facultyStatus = rec.published === false ? 'READY' : 'PUBLISHED';
@@ -1394,9 +1389,11 @@ async function submitFacultyLecture(initialStatus = 'READY') {
   formData.append('classCourse', classCourse);
   formData.append('lectureDate', lectureDate);
   formData.append('description', description);
-  formData.append('duration', facUploadedDuration && facUploadedDuration !== '00:00' ? facUploadedDuration : '05:00');
-  if (facLiveSpeechTranscript && facLiveSpeechTranscript.length > 10) {
-    formData.append('transcript', facLiveSpeechTranscript);
+  formData.append('duration', facUploadedDuration && facUploadedDuration !== '00:00' ? facUploadedDuration : '00:10');
+  const summaryMode = localStorage.getItem('vaani_summary_mode') || 'Medium';
+  formData.append('mode', summaryMode);
+  if (facLiveSpeechTranscript && facLiveSpeechTranscript.trim().length > 5) {
+    formData.append('liveSpeechTranscript', facLiveSpeechTranscript.trim());
   }
   formData.append('isFacultyLecture', 'true');
   formData.append('facultyStatus', initialStatus);
@@ -1415,7 +1412,7 @@ async function submitFacultyLecture(initialStatus = 'READY') {
     if (!res.ok) {
       let errData = {};
       try { errData = await res.json(); } catch {}
-      throw new Error(errData.error || '❌ Upload failed. Please try again.');
+      throw new Error(errData.error || '❌ Audio transcription or processing failed. Please try again.');
     }
 
     const saved = await res.json();
@@ -1441,14 +1438,16 @@ async function submitFacultyLecture(initialStatus = 'READY') {
     clearTimeout(summaryTimer);
 
     if (!backendAvailable) {
-      // Offline mode fallback with actual audio DataURL
+      // Offline mode fallback: only proceed if live browser speech recognition captured real words
+      if (!facLiveSpeechTranscript || facLiveSpeechTranscript.trim().split(/\s+/).length < 3) {
+        showUploadError('❌ Backend transcription server is unreachable and no live browser speech was recognized. Please reconnect or speak clearly into your microphone.');
+        return;
+      }
       try {
         const dataUrl = await fileToDataUrl(facSelectedFile);
         const localId = Date.now();
-        const transcript = facLiveSpeechTranscript && facLiveSpeechTranscript.length > 10
-          ? facLiveSpeechTranscript
-          : buildFallbackTranscript({ title, subject, professorName });
-        const summary = buildFallbackSummary(transcript);
+        const transcript = facLiveSpeechTranscript.trim();
+        const summary = buildExtractiveSummaryFromTranscript(transcript);
         const boxObj = storageBoxId ? storageBoxes.find(b => String(b.id) === String(storageBoxId)) : null;
         const localRec = {
           id: localId,
@@ -1461,7 +1460,7 @@ async function submitFacultyLecture(initialStatus = 'READY') {
           classCourse,
           lectureDate,
           description,
-          duration: facUploadedDuration && facUploadedDuration !== '00:00' ? facUploadedDuration : '05:00',
+          duration: facUploadedDuration && facUploadedDuration !== '00:00' ? facUploadedDuration : '00:10',
           createdAt: formatLocalDisplayDate(new Date()),
           createdAtIso: new Date().toISOString(),
           status: 'Completed',
@@ -1483,9 +1482,9 @@ async function submitFacultyLecture(initialStatus = 'READY') {
         clearFacSelectedFile();
         renderFacultyViews();
         openFacultyReview(localId, false);
-        toast('✅ Lecture processed and ready for Faculty Review!');
+        toast('✅ Lecture processed from live speech and ready for Faculty Review!');
       } catch (readErr) {
-        showUploadError('❌ Audio processing failed. Please upload the recording again.');
+        showUploadError('❌ Audio processing failed. Please record the lecture again.');
       }
     } else {
       showUploadError(e?.message || '❌ Upload failed. Please try again.');
@@ -1703,8 +1702,13 @@ if (facEditTranscriptBtn) {
 if (facSaveTranscriptBtn) {
   facSaveTranscriptBtn.onclick = async () => {
     const newTranscript = (document.getElementById('facTranscriptEditor')?.value || '').trim();
-    await saveFacultyReviewUpdates({ transcript: newTranscript }, '📝 Transcript updated & saved!');
+    if (!newTranscript) {
+      toast('❌ Transcript cannot be empty.');
+      return;
+    }
+    await saveFacultyReviewUpdates({ transcript: newTranscript }, '📝 Transcript updated! Regenerating summary from updated transcript...');
     setTranscriptEditMode(false);
+    await regenerateLectureAi('summary');
   };
 }
 
@@ -1752,12 +1756,14 @@ async function regenerateLectureAi(target) {
       if (smView) smView.textContent = updated.summary || '';
       if (smEdit) smEdit.value = updated.summary || '';
 
-      toast(target === 'transcript' ? '✅ Transcript regenerated!' : '✅ AI Summary regenerated!');
+      toast(target === 'transcript' ? '✅ Transcript & dependent Summary regenerated from audio!' : '✅ AI Summary regenerated from transcript!');
     } else {
-      throw new Error('Regeneration failed');
+      let errData = {};
+      try { errData = await res.json(); } catch {}
+      throw new Error(errData.error || 'Regeneration failed');
     }
   } catch (e) {
-    toast(target === 'transcript' ? '❌ Transcript generation failed. Try again.' : '❌ Summary generation failed. Try again.');
+    toast(`❌ ${e?.message || (target === 'transcript' ? 'Transcript generation failed.' : 'Summary generation failed.')}`);
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -1915,7 +1921,9 @@ if (facReplaceAudioInput) {
         openFacultyReview(currentReviewRecording.id, false);
         toast('✅ Lecture audio replaced & AI content refreshed!');
       } else {
-        toast('❌ Failed to replace audio. Please try again.');
+        let errData = {};
+        try { errData = await res.json(); } catch {}
+        toast(`❌ ${errData.error || 'Failed to replace audio. Please try again.'}`);
       }
     } catch (err) {
       toast('❌ Error replacing lecture audio.');

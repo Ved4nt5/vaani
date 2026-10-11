@@ -26,7 +26,7 @@ const upload = multer({
 // ── Gemini Client Initialization ─────────────────────────────────────────
 
 function getGeminiClient(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
   if (!apiKey || !apiKey.trim()) return null;
   return new GoogleGenAI({
     apiKey: apiKey.trim(),
@@ -105,6 +105,7 @@ interface Recording {
   allowedAccess?: string[];
   studentsAccessed?: number;
   playsCount?: number;
+  totalListeningSeconds?: number;
   avgListeningTime?: string;
   transcript: string;
   summary: string;
@@ -446,28 +447,37 @@ function formatDateTime(date: Date, userTz?: string): string {
 
 function isBrokenOrErrorText(text: string | null | undefined): boolean {
   if (!text || !text.trim()) return true;
-  const lower = text.toLowerCase();
+  const lower = text.toLowerCase().trim();
   return (
     lower.includes('openai whisper could not transcribe') ||
     lower.includes('http 429') ||
     lower.includes('transcription or summary failed') ||
     lower.includes('no transcript available') ||
     lower.includes('no summary available') ||
-    lower.includes('check your api key, account billing')
+    lower.includes('check your api key, account billing') ||
+    lower.includes('in this lecture, we explore the core principles, foundational architecture, and practical real-world implementations of') ||
+    lower.includes('first, we examine how modern systems process input data, structure key representations, and optimize performance under real-world constraints') ||
+    lower.includes('second, we walk through concrete case studies and step-by-step methodologies') ||
+    lower.startsWith('⚠️') ||
+    lower.startsWith('❌')
   );
 }
 
 function isUnhelpfulAudioText(text: string | null | undefined): boolean {
   if (!text) return true;
   const t = text.trim().toLowerCase();
+  if (t.length < 3) return true;
   return (
     t === '00:00' ||
     t === '00:00 - 00:01' ||
     t === '[silence]' ||
     t === '[music]' ||
     t === '[applause]' ||
-    t === 'thank you' ||
-    t === 'thank you.' ||
+    t === '[noise]' ||
+    t === '[inaudible]' ||
+    t === 'no speech detected' ||
+    t === 'no_speech_detected' ||
+    t === '[no_speech_detected]' ||
     t === 'undefined'
   );
 }
@@ -477,6 +487,225 @@ function stripModelLine(text: string): string {
     .replace(/^[•\-\*]?\s*AI Processing Model:.*$/gim, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+const ALLOWED_AUDIO_MIMES = new Set([
+  'audio/webm',
+  'audio/wav',
+  'audio/wave',
+  'audio/x-wav',
+  'audio/mp3',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/m4a',
+  'audio/x-m4a',
+  'audio/ogg',
+  'audio/aac',
+  'audio/flac',
+  'video/webm',
+  'video/mp4',
+]);
+
+const ALLOWED_AUDIO_EXTS = new Set([
+  '.webm',
+  '.wav',
+  '.mp3',
+  '.m4a',
+  '.mp4',
+  '.ogg',
+  '.aac',
+  '.flac',
+]);
+
+interface AudioValidationResult {
+  valid: boolean;
+  error?: string;
+  normalizedMime: string;
+}
+
+function normalizeAudioMimeType(mimeType: string | null | undefined, filename: string): string {
+  const ext = path.extname(filename || '').toLowerCase();
+  if (mimeType) {
+    const baseMime = mimeType.split(';')[0].trim().toLowerCase();
+    if (baseMime === 'video/webm') return 'audio/webm';
+    if (baseMime === 'video/mp4' || baseMime === 'audio/x-m4a' || baseMime === 'audio/m4a') return 'audio/mp4';
+    if (baseMime === 'audio/mp3') return 'audio/mpeg';
+    if (baseMime === 'audio/x-wav' || baseMime === 'audio/wave') return 'audio/wav';
+    if (baseMime.startsWith('audio/')) return baseMime;
+  }
+  if (ext === '.mp3') return 'audio/mpeg';
+  if (ext === '.wav') return 'audio/wav';
+  if (ext === '.m4a' || ext === '.mp4') return 'audio/mp4';
+  if (ext === '.ogg') return 'audio/ogg';
+  if (ext === '.aac') return 'audio/aac';
+  if (ext === '.flac') return 'audio/flac';
+  return 'audio/webm';
+}
+
+function inspectWavBufferForSpeech(buffer: Buffer): { isSilentOrPureSine: boolean; reason?: string } {
+  if (buffer.length < 44) {
+    return { isSilentOrPureSine: true, reason: 'WAV file header is truncated or corrupted (< 44 bytes).' };
+  }
+  const riff = buffer.toString('ascii', 0, 4);
+  const wave = buffer.toString('ascii', 8, 12);
+  if (riff !== 'RIFF' || wave !== 'WAVE') {
+    return { isSilentOrPureSine: true, reason: 'Invalid or corrupted WAV container header.' };
+  }
+
+  let dataOffset = 44;
+  for (let i = 12; i < Math.min(buffer.length - 8, 256); i++) {
+    if (buffer.toString('ascii', i, i + 4) === 'data') {
+      dataOffset = i + 8;
+      break;
+    }
+  }
+  const pcmBytes = buffer.length - dataOffset;
+  if (pcmBytes < 800) {
+    return { isSilentOrPureSine: true, reason: 'Audio recording is too short or contains no PCM audio frames.' };
+  }
+
+  const sampleCount = Math.floor(pcmBytes / 2);
+  let sumSq = 0;
+  let maxAbs = 0;
+  let zeroCrossings = 0;
+  let prevSample = 0;
+  const step = Math.max(1, Math.floor(sampleCount / 8000));
+  let inspected = 0;
+
+  for (let i = 0; i < sampleCount; i += step) {
+    const offset = dataOffset + i * 2;
+    if (offset + 2 > buffer.length) break;
+    const sample = buffer.readInt16LE(offset);
+    const abs = Math.abs(sample);
+    if (abs > maxAbs) maxAbs = abs;
+    sumSq += sample * sample;
+    if (inspected > 0 && ((sample >= 0 && prevSample < 0) || (sample < 0 && prevSample >= 0))) {
+      zeroCrossings++;
+    }
+    prevSample = sample;
+    inspected++;
+  }
+
+  const rms = inspected > 0 ? Math.sqrt(sumSq / inspected) : 0;
+  if (maxAbs < 60 || rms < 15) {
+    return { isSilentOrPureSine: true, reason: 'No audible speech detected in the recording (audio is silent).' };
+  }
+
+  // Detect synthetic pure-tone sine waves (such as 440Hz/523Hz test tones where crest factor is ~1.414)
+  const crestFactor = rms > 0 ? maxAbs / rms : 0;
+  if (crestFactor > 1.35 && crestFactor < 1.50 && inspected > 200) {
+    // Check amplitude variance across windows: speech fluctuates wildly across syllables, pure tone stays constant
+    const windowCount = 8;
+    const winSize = Math.floor(sampleCount / windowCount);
+    if (winSize > 100) {
+      const winRms: number[] = [];
+      for (let w = 0; w < windowCount - 1; w++) {
+        let wSum = 0;
+        let wN = 0;
+        for (let j = 0; j < winSize; j += Math.max(1, Math.floor(winSize / 200))) {
+          const idx = dataOffset + (w * winSize + j) * 2;
+          if (idx + 2 <= buffer.length) {
+            const s = buffer.readInt16LE(idx);
+            wSum += s * s;
+            wN++;
+          }
+        }
+        if (wN > 0) winRms.push(Math.sqrt(wSum / wN));
+      }
+      if (winRms.length >= 4) {
+        const meanRms = winRms.reduce((a, b) => a + b, 0) / winRms.length;
+        const maxDiff = Math.max(...winRms.map(v => Math.abs(v - meanRms)));
+        if (meanRms > 0 && maxDiff / meanRms < 0.08) {
+          return {
+            isSilentOrPureSine: true,
+            reason: 'The audio contains only a synthetic test tone with no spoken words.',
+          };
+        }
+      }
+    }
+  }
+
+  return { isSilentOrPureSine: false };
+}
+
+function validateAudioPayload(
+  audioBuffer: Buffer | null | undefined,
+  filename: string | null | undefined,
+  mimeType: string | null | undefined
+): AudioValidationResult {
+  const safeName = (filename || 'recording.webm').trim();
+  const ext = path.extname(safeName).toLowerCase();
+  const rawMime = (mimeType || '').split(';')[0].trim().toLowerCase();
+  const normalizedMime = normalizeAudioMimeType(mimeType, safeName);
+
+  if (!audioBuffer || audioBuffer.length === 0) {
+    return {
+      valid: false,
+      error: 'Audio recording is empty (0 bytes). Please record or select a valid lecture audio file.',
+      normalizedMime,
+    };
+  }
+
+  if (audioBuffer.length < 128) {
+    return {
+      valid: false,
+      error: 'Audio recording is too small or corrupted to contain recognizable speech.',
+      normalizedMime,
+    };
+  }
+
+  const hasValidMime = rawMime ? ALLOWED_AUDIO_MIMES.has(rawMime) || rawMime.startsWith('audio/') : false;
+  const hasValidExt = ext ? ALLOWED_AUDIO_EXTS.has(ext) : false;
+  if (!hasValidMime && !hasValidExt) {
+    return {
+      valid: false,
+      error: `Unsupported audio format (${rawMime || ext || 'unknown'}). Supported formats: WEBM, WAV, MP3, M4A, MP4, OGG, AAC, FLAC.`,
+      normalizedMime,
+    };
+  }
+
+  // Verify container magic bytes for common formats to catch corrupted files
+  const headerAscii = audioBuffer.toString('ascii', 0, Math.min(16, audioBuffer.length));
+  const isRiffWav = headerAscii.startsWith('RIFF') && audioBuffer.toString('ascii', 8, 12) === 'WAVE';
+  const isEbmlWebm = audioBuffer.length >= 4 && audioBuffer[0] === 0x1a && audioBuffer[1] === 0x45 && audioBuffer[2] === 0xdf && audioBuffer[3] === 0xa3;
+  const isOgg = headerAscii.startsWith('OggS');
+  const isFlac = headerAscii.startsWith('fLaC');
+  const isId3Mp3 = headerAscii.startsWith('ID3') || (audioBuffer.length >= 2 && audioBuffer[0] === 0xff && (audioBuffer[1] & 0xe0) === 0xe0);
+  const isMp4M4a = audioBuffer.length >= 8 && audioBuffer.toString('ascii', 4, 8) === 'ftyp';
+
+  if (ext === '.wav' || normalizedMime === 'audio/wav') {
+    if (!isRiffWav) {
+      return {
+        valid: false,
+        error: 'Corrupted WAV audio file: missing RIFF/WAVE header.',
+        normalizedMime,
+      };
+    }
+    const wavCheck = inspectWavBufferForSpeech(audioBuffer);
+    if (wavCheck.isSilentOrPureSine) {
+      return {
+        valid: false,
+        error: wavCheck.reason || 'WAV audio contains silence or non-speech tone.',
+        normalizedMime,
+      };
+    }
+  } else if (
+    !isRiffWav &&
+    !isEbmlWebm &&
+    !isOgg &&
+    !isFlac &&
+    !isId3Mp3 &&
+    !isMp4M4a
+  ) {
+    // Reject arbitrary text/random binary masquerading as an audio file
+    return {
+      valid: false,
+      error: 'Corrupted or unrecognized audio file header. The file could not be decoded as valid audio.',
+      normalizedMime,
+    };
+  }
+
+  return { valid: true, normalizedMime };
 }
 
 function toStorageBoxDto(box: StorageBox, userTz?: string, user?: User | null): StorageBoxResponseDto {
@@ -506,20 +735,6 @@ function toRecordingDto(recording: Recording, userTz?: string): RecordingRespons
   const isProcessing = recording.facultyStatus === 'PROCESSING' || recording.status === 'Processing';
   const isFailed = recording.status === 'Failed';
 
-  if (!isDraft && !isProcessing && !isFailed) {
-    if (isBrokenOrErrorText(recording.transcript)) {
-      recording.transcript = generateTranscript(
-        null,
-        recording.audioFilename,
-        recording.title,
-        recording.lectureName || recording.subject || undefined,
-        recording.professorName || undefined
-      );
-    }
-    if (isBrokenOrErrorText(recording.summary)) {
-      recording.summary = generateSummary(recording.transcript, 'Medium');
-    }
-  }
   if (recording.summary) {
     recording.summary = stripModelLine(recording.summary);
   }
@@ -549,14 +764,14 @@ function toRecordingDto(recording: Recording, userTz?: string): RecordingRespons
     resolvedStatus = 'Processing';
   } else if (facultyStatus === 'DRAFT') {
     resolvedStatus = 'Draft';
-  } else if (hasAudio && recording.transcript && recording.summary) {
+  } else if (hasAudio && recording.transcript && recording.summary && !isBrokenOrErrorText(recording.transcript)) {
     resolvedStatus = 'Completed';
   }
 
   const studentsAccessed = typeof recording.studentsAccessed === 'number' && recording.studentsAccessed >= 0
     ? recording.studentsAccessed
     : 0;
-  const playsCount = typeof recording.playsCount === 'number' && recording.playsCount >= 0
+  const playsCount = typeof recording.playsCount === 'number' && recording.playsCount > 0
     ? recording.playsCount
     : 0;
   const avgListeningTime =
@@ -596,29 +811,89 @@ function toRecordingDto(recording: Recording, userTz?: string): RecordingRespons
   };
 }
 
-// ── AIService Logic (Fallback + Deterministic NLP Engine) ────────────────
+// ── Grounded Extractive NLP Summarizer & Quality Validators ─────────────
 
-function generateTranscript(
-  rawText: string | null | undefined,
-  filename: string | null | undefined,
-  title?: string,
-  lectureName?: string,
-  professorName?: string
-): string {
-  if (rawText && rawText.trim().length > 0 && !isBrokenOrErrorText(rawText)) {
-    return rawText.trim();
+const STOP_WORDS = new Set([
+  'the', 'and', 'is', 'in', 'to', 'of', 'for', 'with', 'on', 'at', 'from', 'by',
+  'this', 'that', 'are', 'was', 'were', 'been', 'has', 'have', 'had', 'will', 'would',
+  'could', 'should', 'your', 'our', 'their', 'more', 'also', 'some', 'into', 'welcome',
+  'everyone', 'today', 'session', 'lecture', 'going', 'talk', 'about', 'what', 'when',
+  'where', 'which', 'there', 'here', 'they', 'them', 'then', 'than', 'very', 'just',
+  'like', 'make', 'made', 'each', 'other', 'such', 'only', 'over', 'under', 'between',
+]);
+
+function tokenizeContentWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9+#-]+/)
+    .map(w => w.replace(/^[-+#]+|[-+#]+$/g, ''))
+    .filter(w => w.length >= 3 && !STOP_WORDS.has(w));
+}
+
+function validateTranscriptQuality(transcript: string | null | undefined): { valid: boolean; reason?: string } {
+  if (!transcript || !transcript.trim()) {
+    return { valid: false, reason: 'No speech could be recognized from the audio recording.' };
   }
-  const cleanName = filename || 'voice_note.webm';
-  const subject = lectureName || title || cleanName.replace(/\.[^/.]+$/, '');
-  const prof = professorName ? ` led by ${professorName}` : '';
-  return (
-    `Welcome everyone to today's session on ${subject}${prof}. ` +
-    `In this lecture, we explore the core principles, foundational architecture, and practical real-world implementations of ${subject}.\n\n` +
-    `First, we examine how modern systems process input data, structure key representations, and optimize performance under real-world constraints. ` +
-    `Understanding the trade-offs between accuracy, latency, and scalability is essential when designing reliable solutions.\n\n` +
-    `Second, we walk through concrete case studies and step-by-step methodologies. ` +
-    `Please review these key takeaways and action items before our next discussion session.`
-  );
+  const cleaned = transcript.trim();
+  const lower = cleaned.toLowerCase();
+  if (isBrokenOrErrorText(cleaned) || isUnhelpfulAudioText(cleaned)) {
+    return { valid: false, reason: 'Audio contained silence, background noise, or unrecognizable speech.' };
+  }
+  const nonSpeechPhrases = [
+    'no speech detected',
+    'no_speech_detected',
+    'no spoken words',
+    'no clear human speech',
+    'contains only a tone',
+    'contains only silence',
+    'cannot transcribe',
+    'unable to transcribe',
+    'there is no speech',
+    'there are no spoken words',
+    'only background noise',
+    'synthesized tone',
+    'electronic tone',
+  ];
+  if (nonSpeechPhrases.some(p => lower.includes(p))) {
+    return { valid: false, reason: 'No recognizable human speech was detected in the audio recording.' };
+  }
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  if (words.length < 3) {
+    return { valid: false, reason: `Recognized speech is too brief (${words.length} word${words.length === 1 ? '' : 's'}) to form a valid lecture transcript.` };
+  }
+  return { valid: true };
+}
+
+function validateSummaryRelevance(transcript: string, summary: string | null | undefined): { valid: boolean; reason?: string } {
+  if (!summary || !summary.trim()) {
+    return { valid: false, reason: 'Summary is empty.' };
+  }
+  if (isBrokenOrErrorText(summary)) {
+    return { valid: false, reason: 'Summary contains error or placeholder text.' };
+  }
+  const transcriptTokens = new Set(tokenizeContentWords(transcript));
+  const summaryTokens = tokenizeContentWords(summary);
+  if (summaryTokens.length < 4) {
+    return { valid: false, reason: 'Summary is too brief to be useful.' };
+  }
+  if (transcriptTokens.size === 0) {
+    return { valid: false, reason: 'Source transcript has no meaningful content words.' };
+  }
+
+  let overlapCount = 0;
+  for (const token of summaryTokens) {
+    if (transcriptTokens.has(token)) {
+      overlapCount++;
+    }
+  }
+  const overlapRatio = overlapCount / Math.max(1, Math.min(summaryTokens.length, 25));
+  if (overlapCount < 2 || overlapRatio < 0.12) {
+    return {
+      valid: false,
+      reason: 'Generated summary does not match the terminology or concepts present in the lecture transcript.',
+    };
+  }
+  return { valid: true };
 }
 
 function extractKeySentences(sentences: string[], mode = 'Medium'): string[] {
@@ -628,118 +903,138 @@ function extractKeySentences(sentences: string[], mode = 'Medium'): string[] {
 
   const wordFreq = new Map<string, number>();
   for (const sentence of sentences) {
-    for (const w of sentence.toLowerCase().split(/\W+/)) {
-      if (w.length > 3) {
-        wordFreq.set(w, (wordFreq.get(w) || 0) + 1);
-      }
+    for (const w of tokenizeContentWords(sentence)) {
+      wordFreq.set(w, (wordFreq.get(w) || 0) + 1);
     }
   }
 
   const scored = sentences.map((sentence, index) => {
+    const tokens = tokenizeContentWords(sentence);
     let score = 0;
-    for (const w of sentence.toLowerCase().split(/\W+/)) {
+    for (const w of tokens) {
       score += wordFreq.get(w) || 0;
     }
-    return { sentence, score, index };
+    // Normalize slightly by length so well-formed concept sentences win
+    const normScore = tokens.length > 0 ? score / Math.sqrt(tokens.length) : 0;
+    return { sentence: sentence.trim(), score: normScore, index };
   });
 
   scored.sort((a, b) => b.score - a.score);
 
-  let maxSentences = 4;
-  if (mode === 'Short') maxSentences = 2;
-  if (mode === 'Detailed') maxSentences = 6;
+  let maxSentences = 5;
+  if (mode === 'Short') maxSentences = 3;
+  if (mode === 'Detailed') maxSentences = 8;
 
-  const topCount = Math.min(maxSentences, Math.max(2, Math.floor(sentences.length / 2)));
+  const topCount = Math.min(maxSentences, sentences.length);
   const topScored = scored.slice(0, topCount);
   topScored.sort((a, b) => a.index - b.index);
 
-  return topScored.map((a) => a.sentence);
+  return topScored.map(a => a.sentence);
+}
+
+function extractDefinitionsFromSentences(sentences: string[]): string[] {
+  const defPatterns = [
+    /\b([A-Z][A-Za-z0-9\s\-/()]{1,40}?)\s+(?:is defined as|refers to|means|is a type of|is a subset of|is a process|is an algorithm|is a data structure|is a protocol|is a mechanism|is the process of|can be defined as)\s+([^.!?]+[.!?])/i,
+    /\b(?:By definition,\s*)?([A-Za-z0-9\s\-/()]{2,35}?)\s+(?:is|are)\s+(?:a|an|the)\s+([^.!?]{15,180}[.!?])/i,
+  ];
+  const definitions: string[] = [];
+  for (const s of sentences) {
+    const trimmed = s.trim();
+    for (const pat of defPatterns) {
+      if (pat.test(trimmed)) {
+        definitions.push(trimmed);
+        break;
+      }
+    }
+    if (definitions.length >= 4) break;
+  }
+  return definitions;
 }
 
 function extractKeywords(text: string): string[] {
-  const stopWords = new Set([
-    'the', 'and', 'is', 'in', 'to', 'of', 'for', 'with', 'on', 'at', 'from', 'by',
-    'this', 'that', 'are', 'was', 'were', 'been', 'has', 'have', 'had', 'will', 'would',
-    'could', 'should', 'your', 'our', 'their', 'more', 'also', 'some', 'into', 'welcome',
-    'everyone', 'today', 'session',
-  ]);
-
   const counts = new Map<string, number>();
-  for (const word of text.toLowerCase().split(/\W+/)) {
-    if (word.length > 3 && !stopWords.has(word)) {
+  for (const word of tokenizeContentWords(text)) {
+    if (word.length > 3) {
       counts.set(word, (counts.get(word) || 0) + 1);
     }
   }
 
   return Array.from(counts.entries())
     .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map((entry) => entry[0]);
+    .slice(0, 6)
+    .map(entry => entry[0]);
 }
 
-function generateSummary(transcript: string | null | undefined, mode = 'Medium'): string {
-  if (!transcript || transcript.trim().length === 0) {
-    return 'No text available for AI summarization.';
+function generateSummaryFromTranscriptDeterministically(transcript: string, mode = 'Medium'): string {
+  const check = validateTranscriptQuality(transcript);
+  if (!check.valid) {
+    throw new Error(check.reason || 'Transcript is empty or unclear and cannot be summarized.');
   }
 
   const cleaned = transcript.trim();
-  const sentences = cleaned.split(/(?<=[.!?])\s+/).filter(Boolean);
+  const rawSentences = cleaned
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map(s => s.trim())
+    .filter(s => s.length > 4);
 
-  if (sentences.length === 0) {
-    return 'Transcript is too short to generate a summary.';
-  }
-
-  const lines: string[] = [];
-
-  // 1. Executive Summary
-  lines.push('\u2725 EXECUTIVE SUMMARY');
-  if (sentences.length <= 2) {
-    lines.push(cleaned + '\n');
-  } else {
-    let exec = sentences[0] + ' ';
-    if (sentences.length > 3) {
-      exec += sentences[Math.floor(sentences.length / 2)] + ' ';
-    }
-    exec += sentences[sentences.length - 1];
-    lines.push(exec + '\n');
-  }
-
-  // 2. Key Points
-  lines.push('\u2725 KEY POINTS & INSIGHTS');
-  const keySentences = extractKeySentences(sentences, mode);
-  for (const sentence of keySentences) {
-    lines.push('\u2022 ' + sentence.trim());
-  }
-  lines.push('');
-
-  // 3. Topics & Keywords
-  lines.push('\u2725 MAIN TOPICS & KEYWORDS');
+  const sentences = rawSentences.length > 0 ? rawSentences : [cleaned];
   const keywords = extractKeywords(cleaned);
-  lines.push('Tags: ' + (keywords.length > 0 ? keywords.join(', ') : 'general, lecture, notes') + '\n');
+  const keySentences = extractKeySentences(sentences, mode);
+  const definitions = extractDefinitionsFromSentences(sentences);
 
-  // 4. Statistics & Reading Time
-  const wordCount = cleaned.split(/\s+/).filter(Boolean).length;
-  const readingTimeSec = Math.ceil(wordCount / 3.3);
-  lines.push('\u2725 ANALYTICS');
-  lines.push(`\u2022 Total Words: ${wordCount}`);
-  lines.push(`\u2022 Estimated Reading Time: ~${readingTimeSec} seconds`);
+  const sections: string[] = [];
 
-  return lines.join('\n');
+  // 1. Lecture Overview
+  sections.push('1. Lecture Overview');
+  if (sentences.length <= 2) {
+    sections.push(sentences.join(' '));
+  } else {
+    const overviewSentences = [sentences[0], sentences[Math.min(1, sentences.length - 1)]];
+    sections.push(overviewSentences.join(' '));
+  }
+  sections.push('');
+
+  // 2. Key Concepts
+  sections.push('2. Key Concepts');
+  const conceptPoints = keySentences.slice(0, mode === 'Short' ? 3 : 5);
+  for (const pt of conceptPoints) {
+    sections.push(`• ${pt}`);
+  }
+  if (keywords.length > 0) {
+    sections.push(`• Core Terminology: ${keywords.join(', ')}`);
+  }
+  sections.push('');
+
+  // 3. Important Definitions (only included when the lecturer actually stated definitions)
+  if (definitions.length > 0) {
+    sections.push('3. Important Definitions');
+    for (const def of definitions) {
+      sections.push(`• ${def}`);
+    }
+    sections.push('');
+  }
+
+  // 4. Detailed Notes
+  if (sentences.length > 2) {
+    sections.push(`${definitions.length > 0 ? '4' : '3'}. Detailed Notes`);
+    for (const s of sentences.slice(0, mode === 'Detailed' ? 8 : 5)) {
+      sections.push(`• ${s}`);
+    }
+    sections.push('');
+  }
+
+  // 5. Key Takeaways
+  const takeawayNum = definitions.length > 0 ? (sentences.length > 2 ? '5' : '4') : (sentences.length > 2 ? '4' : '3');
+  sections.push(`${takeawayNum}. Key Takeaways`);
+  const takeaways = keySentences.slice(-Math.min(3, keySentences.length));
+  for (const t of takeaways) {
+    sections.push(`• ${t}`);
+  }
+
+  return sections.join('\n').trim();
 }
 
 // ── Gemini + Whisper Transcription & Summarization Pipeline ──────────────
-
-function normalizeAudioMimeType(mimeType: string | null | undefined, filename: string): string {
-  if (mimeType && mimeType.startsWith('audio/')) {
-    return mimeType.split(';')[0].trim();
-  }
-  const ext = path.extname(filename || '').toLowerCase();
-  if (ext === '.mp3') return 'audio/mp3';
-  if (ext === '.wav') return 'audio/wav';
-  if (ext === '.m4a') return 'audio/mp4';
-  if (ext === '.ogg') return 'audio/ogg';
-  return 'audio/webm';
-}
 
 async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let timer: NodeJS.Timeout;
@@ -753,148 +1048,208 @@ async function transcribeAudioBuffer(
   audioBuffer: Buffer | null,
   filename: string,
   mimeType: string,
-  title: string,
-  lectureName: string | null,
-  professorName: string | null
+  liveSpeechHint?: string | null
 ): Promise<string> {
-  if (audioBuffer && audioBuffer.length > 0) {
-    // 1. Try Gemini Audio Transcription with ultra-fast flash-lite model
-    const ai = getGeminiClient();
-    if (ai) {
-      const cleanMime = normalizeAudioMimeType(mimeType, filename);
-      const base64Audio = audioBuffer.toString('base64');
-      const topicHint = [lectureName, title, professorName].filter(Boolean).join(' - ');
-      const candidateModels = [
-        'gemini-2.5-flash',
-        'gemini-3-flash-preview',
-        'gemini-3.1-flash-lite',
-      ];
+  const validation = validateAudioPayload(audioBuffer, filename, mimeType);
+  if (!validation.valid || !audioBuffer) {
+    throw new Error(validation.error || 'Invalid or empty audio file.');
+  }
 
-      for (const modelName of candidateModels) {
-        try {
-          const apiCall = ai.models.generateContent({
-            model: modelName,
-            contents: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: cleanMime,
-                    data: base64Audio,
-                  },
+  const cleanMime = validation.normalizedMime;
+  const errors: string[] = [];
+
+  // 1. Primary: Google Gemini Speech-to-Text Transcription using actual audio bytes ONLY
+  const ai = getGeminiClient();
+  if (ai) {
+    const base64Audio = audioBuffer.toString('base64');
+    const candidateModels = [
+      'gemini-2.5-flash',
+      'gemini-3-flash-preview',
+      'gemini-3.1-flash-lite',
+    ];
+
+    for (const modelName of candidateModels) {
+      try {
+        const apiCall = ai.models.generateContent({
+          model: modelName,
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: cleanMime,
+                  data: base64Audio,
                 },
-                {
-                  text: `Listen carefully and transcribe all spoken words in this audio recording verbatim into clean paragraphs. If no spoken words or dialogue are detected (such as background silence, tone, or noise), write an informative, realistic 3-paragraph lecture transcript for "${topicHint || 'Lecture Notes'}". Do not output timestamps, labels, or explanatory preambles—only the transcribed text.`,
-                },
-              ],
-            },
-          });
-          const response = await withTimeout(apiCall, 5500);
-          const text = response.text?.trim();
-          if (text && text.length > 5 && !isBrokenOrErrorText(text) && !isUnhelpfulAudioText(text)) {
-            return text;
-          }
-        } catch {
-          // Silently try next model or local fallback
+              },
+              {
+                text: [
+                  'You are a strict, verbatim academic speech-to-text transcription system.',
+                  'Transcribe ONLY the actual spoken words heard in this audio recording.',
+                  'CRITICAL RULES:',
+                  '1. Preserve the speaker’s exact words, technical terminology, definitions, formulas, and examples.',
+                  '2. Format with accurate punctuation, sentence boundaries, and clean paragraph breaks.',
+                  '3. Automatically detect the spoken language and transcribe accurately.',
+                  '4. NEVER invent, guess, extrapolate, or add information that is not spoken in the audio.',
+                  '5. If the audio contains only silence, static, a pure tone, music, or unintelligible noise with no clear human speech, output the exact token: [NO_SPEECH_DETECTED]',
+                  '6. Output ONLY the transcript text (or [NO_SPEECH_DETECTED]) with no introductory or concluding remarks.',
+                ].join('\n'),
+              },
+            ],
+          },
+        });
+        const response = await withTimeout(apiCall, 25000);
+        const rawText = response.text?.trim() || '';
+        if (rawText.includes('[NO_SPEECH_DETECTED]') || isUnhelpfulAudioText(rawText)) {
+          errors.push(`${modelName}: No clear human speech was detected in the recorded audio.`);
+          break; // Audio genuinely has no speech for Gemini; fall through to check Whisper or liveSpeechHint
         }
+        const quality = validateTranscriptQuality(rawText);
+        if (quality.valid) {
+          return rawText;
+        }
+        errors.push(`${modelName}: ${quality.reason}`);
+      } catch (err: any) {
+        const msg = err?.message || String(err);
+        errors.push(`${modelName}: ${msg}`);
       }
     }
+  } else {
+    errors.push('GEMINI_API_KEY is not configured on the server.');
+  }
 
-    // 2. Optional Groq / OpenAI Whisper fallback if keys are configured and have quota
-    const groqKey = process.env.GROQ_API_KEY;
-    const openAiKey = process.env.OPENAI_API_KEY;
-    const apiKey = groqKey || openAiKey;
-    if (apiKey && apiKey.trim()) {
-      try {
-        const isGroq = Boolean(groqKey);
-        const endpoint = isGroq
-          ? 'https://api.groq.com/openai/v1/audio/transcriptions'
-          : 'https://api.openai.com/v1/audio/transcriptions';
-        const model = isGroq ? 'whisper-large-v3' : 'whisper-1';
+  // 2. Secondary: Groq / OpenAI Whisper API using actual audio bytes
+  const groqKey = process.env.GROQ_API_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY;
+  const apiKey = groqKey || openAiKey;
+  if (apiKey && apiKey.trim()) {
+    try {
+      const isGroq = Boolean(groqKey);
+      const endpoint = isGroq
+        ? 'https://api.groq.com/openai/v1/audio/transcriptions'
+        : 'https://api.openai.com/v1/audio/transcriptions';
+      const model = isGroq ? 'whisper-large-v3' : 'whisper-1';
 
-        const formData = new FormData();
-        const blob = new Blob([new Uint8Array(audioBuffer)], { type: normalizeAudioMimeType(mimeType, filename) });
-        formData.append('file', blob, filename || 'recording.webm');
-        formData.append('model', model);
+      const formData = new FormData();
+      const blob = new Blob([new Uint8Array(audioBuffer)], { type: cleanMime });
+      formData.append('file', blob, filename || 'recording.webm');
+      formData.append('model', model);
+      formData.append('response_format', 'json');
 
-        const response = await fetch(endpoint, {
+      const response = await withTimeout(
+        fetch(endpoint, {
           method: 'POST',
           headers: { Authorization: `Bearer ${apiKey.trim()}` },
           body: formData,
-        });
+        }),
+        25000
+      );
 
-        if (response.ok) {
-          const data = (await response.json()) as { text?: string };
-          if (data.text && data.text.trim() && !isBrokenOrErrorText(data.text)) {
-            return data.text.trim();
-          }
+      if (response.ok) {
+        const data = (await response.json()) as { text?: string };
+        const whisperText = data.text?.trim() || '';
+        const quality = validateTranscriptQuality(whisperText);
+        if (quality.valid) {
+          return whisperText;
         }
-      } catch {
-        // Silently fall back to built-in generator
+        errors.push(`Whisper: ${quality.reason}`);
+      } else {
+        errors.push(`Whisper HTTP ${response.status}`);
       }
+    } catch (err: any) {
+      errors.push(`Whisper: ${err?.message || String(err)}`);
     }
   }
 
-  // 3. Guaranteed instant local fallback
-  return generateTranscript(null, filename, title, lectureName || undefined, professorName || undefined);
+  // 3. Browser Web Speech API live capture from the same microphone recording session (if verified)
+  if (liveSpeechHint && liveSpeechHint.trim()) {
+    const quality = validateTranscriptQuality(liveSpeechHint);
+    if (quality.valid) {
+      return liveSpeechHint.trim();
+    }
+  }
+
+  throw new Error(
+    `Speech-to-text transcription could not recognize valid speech from the audio recording (${errors[0] || 'No speech recognition service succeeded'}). Please ensure you spoke clearly into the microphone and try again.`
+  );
 }
 
 async function generateAiSummary(transcript: string, mode = 'Medium'): Promise<string> {
-  if (!transcript || !transcript.trim()) {
-    return generateSummary('Lecture notes recorded in Vaani AI.', mode);
+  const transcriptCheck = validateTranscriptQuality(transcript);
+  if (!transcriptCheck.valid) {
+    throw new Error(
+      transcriptCheck.reason ||
+        'Cannot generate AI summary because the lecture transcript is empty, incomplete, or invalid.'
+    );
   }
 
+  const cleanedTranscript = transcript.trim();
   const ai = getGeminiClient();
+
   if (ai) {
-    const wordCount = transcript.trim().split(/\s+/).filter(Boolean).length;
-    const readingTimeSec = Math.ceil(wordCount / 3.3);
-    const lengthGuide =
+    const depthInstruction =
       mode === 'Short'
-        ? 'Keep the executive summary to 1-2 sentences and 2-3 bullet points.'
+        ? 'Keep each included section concise (1-2 sentences for overview, 2-4 bullets per section).'
         : mode === 'Detailed'
-        ? 'Provide a comprehensive 4-sentence executive summary and 5-6 detailed bullet points.'
-        : 'Provide a concise 2-3 sentence executive summary and 3-4 key bullet points.';
+        ? 'Provide thorough revision notes capturing all technical explanations, definitions, and examples present in the transcript.'
+        : 'Provide clear, well-structured bullet points suitable for college exam revision.';
 
     const summaryModels = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'];
     for (const modelName of summaryModels) {
       try {
         const summaryCall = ai.models.generateContent({
           model: modelName,
-          contents: `Summarize the following transcript using this exact structure and headings:
-
-✥ EXECUTIVE SUMMARY
-(Write the executive summary here. ${lengthGuide})
-
-✥ KEY POINTS & INSIGHTS
-• (Key point 1)
-• (Key point 2)
-• (Key point 3)
-
-✥ MAIN TOPICS & KEYWORDS
-Tags: (5 comma-separated relevant keywords)
-
-✥ ANALYTICS
-• Total Words: ${wordCount}
-• Estimated Reading Time: ~${readingTimeSec} seconds
-
-Transcript:
-${transcript}`,
+          contents: [
+            'You are an accurate academic lecture summarizer.',
+            'Generate a structured lecture summary STRICTLY AND EXCLUSIVELY from the provided transcript below.',
+            '',
+            'STRICT GROUNDING RULES:',
+            '1. Base every single point, definition, example, and takeaway ONLY on what is explicitly stated in the transcript.',
+            '2. NEVER invent facts, examples, definitions, formulas, or conclusions that are absent from the transcript.',
+            '3. NEVER use outside knowledge or guess based on a topic name.',
+            '4. Preserve the lecturer’s exact technical terminology and meaning.',
+            `5. ${depthInstruction}`,
+            '6. Organize the summary using the following numbered headings ONLY where supported by the transcript content (omit any section that was not covered in the transcript):',
+            '   1. Lecture Overview',
+            '   2. Key Concepts',
+            '   3. Important Definitions',
+            '   4. Detailed Notes',
+            '   5. Key Takeaways',
+            '7. If the transcript does not contain enough coherent educational content to summarize, output the exact token: [INSUFFICIENT_TRANSCRIPT]',
+            '',
+            'LECTURE TRANSCRIPT:',
+            cleanedTranscript,
+          ].join('\n'),
           config: {
-            maxOutputTokens: 600,
+            maxOutputTokens: 1200,
+            temperature: 0.1,
           },
         });
 
-        const response = await withTimeout(summaryCall, 4500);
-        const summaryText = response.text?.trim();
-        if (summaryText && summaryText.length > 20 && !isBrokenOrErrorText(summaryText)) {
-          return stripModelLine(summaryText);
+        const response = await withTimeout(summaryCall, 20000);
+        const summaryText = stripModelLine(response.text?.trim() || '');
+        if (summaryText.includes('[INSUFFICIENT_TRANSCRIPT]')) {
+          throw new Error('The transcript is too brief or unclear to generate a reliable lecture summary.');
         }
-      } catch {
-        // Fall back to instant built-in NLP engine on 503 or timeout
+
+        const relevance = validateSummaryRelevance(cleanedTranscript, summaryText);
+        if (relevance.valid) {
+          return summaryText;
+        }
+      } catch (err: any) {
+        if (err?.message?.includes('too brief or unclear')) {
+          throw err;
+        }
+        // Try next Gemini model or deterministic transcript-grounded extractor
       }
     }
   }
 
-  return generateSummary(transcript, mode);
+  // Fallback: Deterministic extractive summary built strictly from the actual transcript sentences
+  const deterministicSummary = generateSummaryFromTranscriptDeterministically(cleanedTranscript, mode);
+  const relevance = validateSummaryRelevance(cleanedTranscript, deterministicSummary);
+  if (!relevance.valid) {
+    throw new Error(relevance.reason || 'Summary validation failed against the source transcript.');
+  }
+  return deterministicSummary;
 }
 
 // ── SMTP Email Service (Transporter, Resilient Delivery & Fallbacks) ──────
@@ -1858,13 +2213,27 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
       : new Date().toISOString().slice(0, 10);
     const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
     const duration = typeof req.body.duration === 'string' && req.body.duration.trim() ? req.body.duration.trim() : '00:00';
-    const providedTranscript = typeof req.body.transcript === 'string' ? req.body.transcript.trim() : '';
-    const providedSummary = typeof req.body.summary === 'string' ? req.body.summary.trim() : '';
+    const liveSpeechTranscript = typeof req.body.liveSpeechTranscript === 'string'
+      ? req.body.liveSpeechTranscript.trim()
+      : (typeof req.body.transcript === 'string' ? req.body.transcript.trim() : '');
     const summaryMode = typeof req.body.mode === 'string' && req.body.mode.trim() ? req.body.mode.trim() : 'Medium';
 
-    const originalFilename = file?.originalname || 'recording.webm';
-    const audioBytes = file?.buffer && file.buffer.length > 0 ? file.buffer : generateToneWav(440, 3);
-    const audioContentType = file?.mimetype || 'audio/wav';
+    if (!file || !file.buffer || file.buffer.length === 0) {
+      return res.status(400).json({
+        error: 'No recorded audio file was received. Please record your lecture using the microphone before processing.',
+      });
+    }
+
+    const originalFilename = file.originalname || 'recording.webm';
+    const audioValidation = validateAudioPayload(file.buffer, originalFilename, file.mimetype);
+    if (!audioValidation.valid) {
+      return res.status(422).json({
+        error: audioValidation.error || 'Invalid, silent, or corrupted audio file.',
+      });
+    }
+
+    const audioBytes = file.buffer;
+    const audioContentType = audioValidation.normalizedMime;
 
     let storageBoxId: number | null = null;
     if (req.body.storageBoxId !== undefined && req.body.storageBoxId !== null && req.body.storageBoxId !== '') {
@@ -1881,25 +2250,33 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
 
     const resolvedSubject = subject || (storageBoxId ? storageBoxes.get(storageBoxId)?.name : null) || lectureName || 'General Studies';
 
+    const initialFacultyStatus: 'DRAFT' | 'PROCESSING' | 'READY' | 'PUBLISHED' =
+      req.body.facultyStatus === 'PUBLISHED'
+        ? 'PUBLISHED'
+        : req.body.facultyStatus === 'DRAFT'
+        ? 'DRAFT'
+        : 'READY';
+
     let finalTranscript = '';
-    if (providedTranscript.length > 0 && !isBrokenOrErrorText(providedTranscript)) {
-      finalTranscript = providedTranscript;
-    } else {
+    let finalSummary = '';
+
+    try {
       finalTranscript = await transcribeAudioBuffer(
-        file?.buffer && file.buffer.length > 0 ? file.buffer : null,
+        audioBytes,
         originalFilename,
         audioContentType,
-        title,
-        resolvedSubject,
-        professorName
+        liveSpeechTranscript || null
       );
-    }
-
-    let finalSummary = '';
-    if (providedSummary.length > 0 && !isBrokenOrErrorText(providedSummary)) {
-      finalSummary = providedSummary;
-    } else {
       finalSummary = await generateAiSummary(finalTranscript, summaryMode);
+    } catch (procErr: any) {
+      if (initialFacultyStatus === 'DRAFT') {
+        finalTranscript = '';
+        finalSummary = '';
+      } else {
+        return res.status(422).json({
+          error: procErr?.message || 'Speech-to-text transcription or summarization failed for this recording.',
+        });
+      }
     }
 
     let allowedAccess: string[] = ['SE Computer Engineering', 'Data Structures', 'AI & Machine Learning'];
@@ -1912,12 +2289,6 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
       allowedAccess = Array.from(new Set([classCourse, resolvedSubject].filter(Boolean) as string[]));
     }
 
-    const initialFacultyStatus: 'DRAFT' | 'PROCESSING' | 'READY' | 'PUBLISHED' =
-      req.body.facultyStatus === 'PUBLISHED'
-        ? 'PUBLISHED'
-        : req.body.facultyStatus === 'DRAFT'
-        ? 'DRAFT'
-        : 'READY';
     const isPublished = initialFacultyStatus === 'PUBLISHED';
 
     const newRec: Recording = {
@@ -1932,7 +2303,7 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
       description,
       duration,
       createdAt: new Date(),
-      status: 'Completed',
+      status: initialFacultyStatus === 'DRAFT' && !finalTranscript ? 'Draft' : 'Completed',
       facultyStatus: initialFacultyStatus,
       published: isPublished,
       isFacultyLecture: true,
@@ -1942,17 +2313,17 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
       avgListeningTime: isPublished ? '22m 15s' : '00m 00s',
       transcript: finalTranscript,
       summary: finalSummary,
-      audioFilename: audioBytes ? originalFilename : null,
-      audioContentType: audioBytes ? audioContentType : null,
+      audioFilename: originalFilename,
+      audioContentType,
       audioData: audioBytes,
     };
 
     recordings.set(newRec.id, newRec);
     const userTz = getRequestTimeZone(req);
     return res.status(201).json(toRecordingDto(newRec, userTz));
-  } catch (err) {
+  } catch (err: any) {
     console.error('Error saving recording:', err);
-    return res.status(500).json({ error: 'Failed to save recording.' });
+    return res.status(500).json({ error: err?.message || 'Failed to save recording.' });
   }
 });
 
@@ -2144,23 +2515,28 @@ app.post('/api/recordings/:id/regenerate', async (req: Request, res: Response) =
   const target = (req.body?.target || 'both').toLowerCase();
   const mode = req.body?.mode || 'Medium';
 
-  if (target === 'transcript' || target === 'both') {
-    rec.transcript = await transcribeAudioBuffer(
-      rec.audioData,
-      rec.audioFilename || 'lecture.webm',
-      rec.audioContentType || 'audio/webm',
-      rec.title,
-      rec.lectureName || rec.subject || null,
-      rec.professorName
-    );
-  }
-  if (target === 'summary' || target === 'both') {
-    rec.summary = await generateAiSummary(rec.transcript, mode);
-  }
+  try {
+    if (target === 'transcript' || target === 'both') {
+      rec.transcript = await transcribeAudioBuffer(
+        rec.audioData,
+        rec.audioFilename || 'lecture.webm',
+        rec.audioContentType || 'audio/webm',
+        null
+      );
+      // Regenerating the transcript must also refresh the dependent summary so they never go out of sync
+      rec.summary = await generateAiSummary(rec.transcript, mode);
+    } else if (target === 'summary') {
+      rec.summary = await generateAiSummary(rec.transcript, mode);
+    }
 
-  recordings.set(id, rec);
-  const userTz = getRequestTimeZone(req);
-  return res.status(200).json(toRecordingDto(rec, userTz));
+    recordings.set(id, rec);
+    const userTz = getRequestTimeZone(req);
+    return res.status(200).json(toRecordingDto(rec, userTz));
+  } catch (err: any) {
+    return res.status(422).json({
+      error: err?.message || 'Failed to regenerate lecture transcript or summary from the source recording.',
+    });
+  }
 });
 
 app.post('/api/recordings/:id/publish', (req: Request, res: Response) => {
@@ -2233,26 +2609,39 @@ app.post('/api/recordings/:id/replace-audio', upload.single('file'), async (req:
   }
 
   const file = req.file;
+  if (!file || !file.buffer || file.buffer.length === 0) {
+    return res.status(400).json({ error: 'Please provide a valid replacement audio file.' });
+  }
+
+  const audioValidation = validateAudioPayload(file.buffer, file.originalname || 'replaced_lecture.webm', file.mimetype);
+  if (!audioValidation.valid) {
+    return res.status(422).json({
+      error: audioValidation.error || 'Invalid, silent, or corrupted replacement audio file.',
+    });
+  }
+
   const duration = typeof req.body.duration === 'string' && req.body.duration.trim() ? req.body.duration.trim() : rec.duration;
   const regenerateAi = req.body.regenerateAi !== 'false';
 
-  if (file?.buffer && file.buffer.length > 0) {
-    rec.audioData = file.buffer;
-    rec.audioFilename = file.originalname || 'replaced_lecture.webm';
-    rec.audioContentType = file.mimetype || 'audio/webm';
-  }
+  rec.audioData = file.buffer;
+  rec.audioFilename = file.originalname || 'replaced_lecture.webm';
+  rec.audioContentType = audioValidation.normalizedMime;
   rec.duration = duration;
 
   if (regenerateAi) {
-    rec.transcript = await transcribeAudioBuffer(
-      rec.audioData,
-      rec.audioFilename || 'lecture.webm',
-      rec.audioContentType || 'audio/webm',
-      rec.title,
-      rec.lectureName,
-      rec.professorName
-    );
-    rec.summary = await generateAiSummary(rec.transcript, 'Medium');
+    try {
+      rec.transcript = await transcribeAudioBuffer(
+        rec.audioData,
+        rec.audioFilename,
+        rec.audioContentType,
+        null
+      );
+      rec.summary = await generateAiSummary(rec.transcript, 'Medium');
+    } catch (err: any) {
+      return res.status(422).json({
+        error: err?.message || 'Replaced audio could not be transcribed or summarized.',
+      });
+    }
   }
 
   recordings.set(id, rec);
