@@ -1116,50 +1116,7 @@ async function transcribeAudioBuffer(
     errors.push('GEMINI_API_KEY is not configured on the server.');
   }
 
-  // 2. Secondary: Groq / OpenAI Whisper API using actual audio bytes
-  const groqKey = process.env.GROQ_API_KEY;
-  const openAiKey = process.env.OPENAI_API_KEY;
-  const apiKey = groqKey || openAiKey;
-  if (apiKey && apiKey.trim()) {
-    try {
-      const isGroq = Boolean(groqKey);
-      const endpoint = isGroq
-        ? 'https://api.groq.com/openai/v1/audio/transcriptions'
-        : 'https://api.openai.com/v1/audio/transcriptions';
-      const model = isGroq ? 'whisper-large-v3' : 'whisper-1';
-
-      const formData = new FormData();
-      const blob = new Blob([new Uint8Array(audioBuffer)], { type: cleanMime });
-      formData.append('file', blob, filename || 'recording.webm');
-      formData.append('model', model);
-      formData.append('response_format', 'json');
-
-      const response = await withTimeout(
-        fetch(endpoint, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${apiKey.trim()}` },
-          body: formData,
-        }),
-        25000
-      );
-
-      if (response.ok) {
-        const data = (await response.json()) as { text?: string };
-        const whisperText = data.text?.trim() || '';
-        const quality = validateTranscriptQuality(whisperText);
-        if (quality.valid) {
-          return whisperText;
-        }
-        errors.push(`Whisper: ${quality.reason}`);
-      } else {
-        errors.push(`Whisper HTTP ${response.status}`);
-      }
-    } catch (err: any) {
-      errors.push(`Whisper: ${err?.message || String(err)}`);
-    }
-  }
-
-  // 3. Browser Web Speech API live capture from the same microphone recording session (if verified)
+  // 2. Browser Web Speech API live capture from the same microphone recording session (if verified)
   if (liveSpeechHint && liveSpeechHint.trim()) {
     const quality = validateTranscriptQuality(liveSpeechHint);
     if (quality.valid) {
