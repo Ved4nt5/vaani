@@ -1055,10 +1055,34 @@ async function transcribeAudioBuffer(
     throw new Error(validation.error || 'Invalid or empty audio file.');
   }
 
+  // If a verified live speech transcription was captured by the browser speech recognition API, validate and prioritize it if robust
+  if (liveSpeechHint && liveSpeechHint.trim()) {
+    const liveQuality = validateTranscriptQuality(liveSpeechHint);
+    if (liveQuality.valid && liveSpeechHint.trim().split(/\s+/).length >= 3) {
+      return liveSpeechHint.trim();
+    }
+  }
+
   const cleanMime = validation.normalizedMime;
   const errors: string[] = [];
 
-  // 1. Primary: Google Gemini Speech-to-Text Transcription using actual audio bytes ONLY
+  // Helper to execute with retry
+  async function callWithRetry<T>(fn: () => Promise<T>, retries = 2, delayMs = 1000): Promise<T> {
+    let lastErr: any;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        return await fn();
+      } catch (err: any) {
+        lastErr = err;
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, delayMs * Math.pow(2, attempt)));
+        }
+      }
+    }
+    throw lastErr;
+  }
+
+  // 1. Primary: Google Gemini Speech-to-Text Transcription using actual audio bytes with retries
   const ai = getGeminiClient();
   if (ai) {
     const base64Audio = audioBuffer.toString('base64');
@@ -1070,37 +1094,40 @@ async function transcribeAudioBuffer(
 
     for (const modelName of candidateModels) {
       try {
-        const apiCall = ai.models.generateContent({
-          model: modelName,
-          contents: {
-            parts: [
-              {
-                inlineData: {
-                  mimeType: cleanMime,
-                  data: base64Audio,
+        const rawText = await callWithRetry(async () => {
+          const apiCall = ai.models.generateContent({
+            model: modelName,
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: cleanMime,
+                    data: base64Audio,
+                  },
                 },
-              },
-              {
-                text: [
-                  'You are a strict, verbatim academic speech-to-text transcription system.',
-                  'Transcribe ONLY the actual spoken words heard in this audio recording.',
-                  'CRITICAL RULES:',
-                  '1. Preserve the speaker’s exact words, technical terminology, definitions, formulas, and examples.',
-                  '2. Format with accurate punctuation, sentence boundaries, and clean paragraph breaks.',
-                  '3. Automatically detect the spoken language and transcribe accurately.',
-                  '4. NEVER invent, guess, extrapolate, or add information that is not spoken in the audio.',
-                  '5. If the audio contains only silence, static, a pure tone, music, or unintelligible noise with no clear human speech, output the exact token: [NO_SPEECH_DETECTED]',
-                  '6. Output ONLY the transcript text (or [NO_SPEECH_DETECTED]) with no introductory or concluding remarks.',
-                ].join('\n'),
-              },
-            ],
-          },
-        });
-        const response = await withTimeout(apiCall, 25000);
-        const rawText = response.text?.trim() || '';
+                {
+                  text: [
+                    'You are a strict, verbatim academic speech-to-text transcription system.',
+                    'Transcribe ONLY the actual spoken words heard in this audio recording.',
+                    'CRITICAL RULES:',
+                    '1. Preserve the speaker’s exact words, technical terminology, definitions, formulas, and examples.',
+                    '2. Format with accurate punctuation, sentence boundaries, and clean paragraph breaks.',
+                    '3. Automatically detect the spoken language and transcribe accurately.',
+                    '4. NEVER invent, guess, extrapolate, or add information that is not spoken in the audio.',
+                    '5. If the audio contains only silence, static, a pure tone, music, or unintelligible noise with no clear human speech, output the exact token: [NO_SPEECH_DETECTED]',
+                    '6. Output ONLY the transcript text (or [NO_SPEECH_DETECTED]) with no introductory or concluding remarks.',
+                  ].join('\n'),
+                },
+              ],
+            },
+          });
+          const response = await withTimeout(apiCall, 30000);
+          return response.text?.trim() || '';
+        }, 1, 1000);
+
         if (rawText.includes('[NO_SPEECH_DETECTED]') || isUnhelpfulAudioText(rawText)) {
           errors.push(`${modelName}: No clear human speech was detected in the recorded audio.`);
-          break; // Audio genuinely has no speech for Gemini; fall through to check Whisper or liveSpeechHint
+          continue;
         }
         const quality = validateTranscriptQuality(rawText);
         if (quality.valid) {
@@ -1108,15 +1135,59 @@ async function transcribeAudioBuffer(
         }
         errors.push(`${modelName}: ${quality.reason}`);
       } catch (err: any) {
-        const msg = err?.message || String(err);
-        errors.push(`${modelName}: ${msg}`);
+        errors.push(`${modelName}: ${err?.message || String(err)}`);
       }
     }
   } else {
     errors.push('GEMINI_API_KEY is not configured on the server.');
   }
 
-  // 2. Browser Web Speech API live capture from the same microphone recording session (if verified)
+  // 2. Secondary: Groq / OpenAI Whisper API using actual audio bytes with retry
+  const groqKey = process.env.GROQ_API_KEY;
+  const openAiKey = process.env.OPENAI_API_KEY;
+  const apiKey = groqKey || openAiKey;
+  if (apiKey && apiKey.trim()) {
+    try {
+      const isGroq = Boolean(groqKey);
+      const endpoint = isGroq
+        ? 'https://api.groq.com/openai/v1/audio/transcriptions'
+        : 'https://api.openai.com/v1/audio/transcriptions';
+      const model = isGroq ? 'whisper-large-v3' : 'whisper-1';
+
+      const whisperText = await callWithRetry(async () => {
+        const formData = new FormData();
+        const blob = new Blob([new Uint8Array(audioBuffer)], { type: cleanMime });
+        formData.append('file', blob, filename || 'recording.webm');
+        formData.append('model', model);
+        formData.append('response_format', 'json');
+
+        const response = await withTimeout(
+          fetch(endpoint, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${apiKey.trim()}` },
+            body: formData,
+          }),
+          30000
+        );
+
+        if (!response.ok) {
+          throw new Error(`Whisper HTTP ${response.status}`);
+        }
+        const data = (await response.json()) as { text?: string };
+        return data.text?.trim() || '';
+      }, 1, 1000);
+
+      const quality = validateTranscriptQuality(whisperText);
+      if (quality.valid) {
+        return whisperText;
+      }
+      errors.push(`Whisper: ${quality.reason}`);
+    } catch (err: any) {
+      errors.push(`Whisper: ${err?.message || String(err)}`);
+    }
+  }
+
+  // 3. Fallback to live speech hint if available
   if (liveSpeechHint && liveSpeechHint.trim()) {
     const quality = validateTranscriptQuality(liveSpeechHint);
     if (quality.valid) {
