@@ -4,5 +4,7 @@
   "user": "programmmariojs8@gmail.com",
   "pass": "eipsenitutruqzxo",
   "secure": false,
-  "from": "\"Vaani AI\" <programmmariojs8@gmail.com>"
+  "from": "\"Vaani AI\" <programmmariojs8@gmail.com>",
+  "googleClientId": "",
+  "googleClientSecret": ""
 }

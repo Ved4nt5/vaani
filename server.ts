@@ -4,9 +4,57 @@ import multer from 'multer';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
+import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import nodemailer from 'nodemailer';
 import { GoogleGenAI } from '@google/genai';
+import {
+  db,
+  AUDIO_DIR,
+  resolveAudioPath,
+  saveAudioFile,
+  deleteAudioFile,
+  getAudioBuffer,
+  getSystemSetting,
+  setSystemSetting,
+  hashPassword,
+  checkPassword,
+  User,
+  Otp,
+  StorageBox,
+  Recording,
+  LectureAccessLog,
+  getUserByEmail,
+  getUserById,
+  getAllUsers,
+  getStudents,
+  saveUser,
+  updateUserEmail,
+  setOtp,
+  getOtp,
+  deleteOtp,
+  saveSession,
+  getSession,
+  deleteSession,
+  revokeToken,
+  isTokenRevoked,
+  getAllStorageBoxes,
+  getStorageBoxById,
+  createStorageBox,
+  updateStorageBox,
+  deleteStorageBox,
+  getAllRecordings,
+  getRecordingById,
+  createRecording,
+  updateRecording,
+  deleteRecording,
+  recordStudentAccess,
+  getAccessedStudentsForLecture,
+  getAllAccessedStudentsPerLecture,
+  logLectureAccess,
+  getLectureAccessLogs,
+  seedDatabaseIfEmpty,
+} from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,13 +71,124 @@ const upload = multer({
   limits: { fileSize: 200 * 1024 * 1024 },
 });
 
-// ── Gemini Client Initialization ─────────────────────────────────────────
+// ── Gemini & Environment Configuration ─────────────────────────────────────
+
+const ENV_FILE = path.join(__dirname, '.env');
+try {
+  if (fs.existsSync(ENV_FILE)) {
+    process.loadEnvFile(ENV_FILE);
+  }
+} catch (e) {
+  // Ignore loadEnvFile error if malformed
+}
+
+const GEMINI_CONFIG_FILE = path.join(__dirname, '.gemini-config.json');
+
+function isValidCredential(val: string | null | undefined): boolean {
+  if (!val) return false;
+  const trimmed = val.trim().toLowerCase();
+  return trimmed !== '' && trimmed !== 'none' && trimmed !== 'null' && trimmed !== 'undefined';
+}
+
+function readSavedGeminiConfig(): { apiKey?: string; model?: string } {
+  try {
+    if (fs.existsSync(GEMINI_CONFIG_FILE)) {
+      const raw = fs.readFileSync(GEMINI_CONFIG_FILE, 'utf8');
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return {};
+}
+
+function writeSavedGeminiConfig(cfg: { apiKey?: string; model?: string }) {
+  try {
+    fs.writeFileSync(GEMINI_CONFIG_FILE, JSON.stringify(cfg, null, 2), 'utf8');
+  } catch {}
+}
+
+function getGeminiApiKey(): string | null {
+  const envKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  if (isValidCredential(envKey)) return envKey!.trim();
+
+  try {
+    const dbKey = getSystemSetting('gemini_api_key');
+    if (isValidCredential(dbKey)) return dbKey!.trim();
+  } catch {}
+
+  const saved = readSavedGeminiConfig();
+  if (isValidCredential(saved.apiKey)) return saved.apiKey!.trim();
+
+  return null;
+}
+
+function saveGeminiApiKey(key: string, activeModel = 'gemini-3.8-flash') {
+  const trimmed = key.trim();
+  process.env.GEMINI_API_KEY = trimmed;
+
+  try {
+    setSystemSetting('gemini_api_key', trimmed);
+  } catch {}
+
+  writeSavedGeminiConfig({ apiKey: trimmed, model: activeModel });
+
+  try {
+    let envContent = '';
+    if (fs.existsSync(ENV_FILE)) {
+      envContent = fs.readFileSync(ENV_FILE, 'utf8');
+      if (/^GEMINI_API_KEY=.*$/m.test(envContent)) {
+        envContent = envContent.replace(/^GEMINI_API_KEY=.*$/m, `GEMINI_API_KEY=${trimmed}`);
+      } else {
+        envContent += `\nGEMINI_API_KEY=${trimmed}\n`;
+      }
+    } else {
+      envContent = `GEMINI_API_KEY=${trimmed}\n`;
+    }
+    fs.writeFileSync(ENV_FILE, envContent, 'utf8');
+  } catch {}
+}
+
+async function verifyGeminiApiKey(apiKey: string): Promise<{ valid: boolean; error?: string; model?: string }> {
+  const testModels = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.5-flash', 'gemini-flash-latest'];
+  let lastError = '';
+
+  for (const model of testModels) {
+    try {
+      const client = new GoogleGenAI({
+        apiKey: apiKey.trim(),
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          },
+        },
+      });
+
+      const call = client.models.generateContent({
+        model,
+        contents: 'Test connection. Please respond with OK.',
+        config: {
+          maxOutputTokens: 10,
+        },
+      });
+      const res = await withTimeout(call, 15000);
+      if (res && (res.text !== undefined || res.candidates?.length)) {
+        return { valid: true, model };
+      }
+    } catch (err: any) {
+      lastError = err?.message || String(err);
+      if (lastError.includes('API key not valid') || lastError.includes('API_KEY_INVALID')) {
+        return { valid: false, error: 'API key is not valid. Please pass a valid key from Google AI Studio.' };
+      }
+    }
+  }
+
+  return { valid: false, error: lastError || 'Could not verify Gemini API key.' };
+}
 
 function getGeminiClient(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
-  if (!apiKey || !apiKey.trim()) return null;
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) return null;
   return new GoogleGenAI({
-    apiKey: apiKey.trim(),
+    apiKey,
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build',
@@ -38,40 +197,43 @@ function getGeminiClient(): GoogleGenAI | null {
   });
 }
 
-// ── Types & In-Memory Stores ─────────────────────────────────────────────
+function transcribeWithPythonWhisper(audioBuffer: Buffer, filename: string): Promise<string> {
+  return new Promise((resolve) => {
+    try {
+      const scriptPath = path.join(__dirname, 'backend', 'transcribe_whisper.py');
+      if (!fs.existsSync(scriptPath)) {
+        return resolve('');
+      }
+      const safeName = `tmp_${Date.now()}_${(filename || 'recording.webm').replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+      const tempPath = path.join(AUDIO_DIR, safeName);
+      fs.writeFileSync(tempPath, audioBuffer);
 
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  password: string;
-  role: 'faculty' | 'student';
-  facultyId?: string;
-  department?: string;
-  avatarUrl?: string;
-  course?: string;
-  summaryMode?: string;
-  verified: boolean;
-  createdAt: Date;
+      const pyProc = spawn('python', [scriptPath, tempPath], {
+        timeout: 30000,
+        env: { ...process.env },
+      });
+
+      let stdout = '';
+      pyProc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+      pyProc.on('close', (code) => {
+        try { fs.unlinkSync(tempPath); } catch {}
+        if (code === 0 && stdout.trim()) {
+          resolve(stdout.trim());
+        } else {
+          resolve('');
+        }
+      });
+      pyProc.on('error', () => {
+        try { fs.unlinkSync(tempPath); } catch {}
+        resolve('');
+      });
+    } catch {
+      resolve('');
+    }
+  });
 }
 
-interface Otp {
-  id: number;
-  email: string;
-  code: string;
-  createdAt: Date;
-  expiresAt: Date;
-}
-
-interface StorageBox {
-  id: number;
-  name: string;
-  description: string;
-  createdBy: string;
-  facultyId?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
+// ── DTO Interfaces ───────────────────────────────────────────────────────
 
 interface StorageBoxResponseDto {
   id: number;
@@ -79,39 +241,12 @@ interface StorageBoxResponseDto {
   description: string;
   createdBy: string;
   facultyId?: string;
+  allowedStudents?: string[];
   recordingCount: number;
   publishedRecordingCount: number;
   createdAt: string;
   updatedAt: string;
   lastUpdatedFormatted: string;
-}
-
-interface Recording {
-  id: number;
-  storageBoxId?: number | null;
-  title: string;
-  lectureName: string | null;
-  professorName: string | null;
-  subject?: string | null;
-  classCourse?: string | null;
-  lectureDate?: string | null;
-  description?: string | null;
-  duration: string;
-  createdAt: Date;
-  status: string;
-  facultyStatus?: 'DRAFT' | 'PROCESSING' | 'READY' | 'PUBLISHED';
-  published?: boolean;
-  isFacultyLecture?: boolean;
-  allowedAccess?: string[];
-  studentsAccessed?: number;
-  playsCount?: number;
-  totalListeningSeconds?: number;
-  avgListeningTime?: string;
-  transcript: string;
-  summary: string;
-  audioFilename: string | null;
-  audioContentType: string | null;
-  audioData: Buffer | null;
 }
 
 interface RecordingResponseDto {
@@ -134,6 +269,7 @@ interface RecordingResponseDto {
   published?: boolean;
   isFacultyLecture?: boolean;
   allowedAccess?: string[];
+  allowedStudents?: string[];
   studentsAccessed?: number;
   playsCount?: number;
   avgListeningTime?: string;
@@ -142,19 +278,6 @@ interface RecordingResponseDto {
   hasAudio: boolean;
   audioUrl: string | null;
 }
-
-const users = new Map<string, User>();
-const otps = new Map<string, Otp>();
-const sessions = new Map<string, User>();
-const revokedTokens = new Set<string>();
-const recordings = new Map<number, Recording>();
-const storageBoxes = new Map<number, StorageBox>();
-const accessedStudentsPerLecture = new Map<number, Set<string>>();
-
-let userIdCounter = 1;
-let otpIdCounter = 1;
-let recordingIdCounter = 1;
-let storageBoxIdCounter = 1;
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -167,14 +290,6 @@ const KNOWN_COURSES = new Set([
   'fe general engineering',
   'm.tech ai & data science',
 ]);
-
-function hashPassword(password: string): string {
-  return crypto.createHash('sha256').update(password, 'utf8').digest('hex');
-}
-
-function checkPassword(rawPassword: string, hashedPassword: string): boolean {
-  return hashPassword(rawPassword) === hashedPassword;
-}
 
 function generateOtpCode(): string {
   return String(crypto.randomInt(100000, 1000000));
@@ -197,7 +312,7 @@ function createSessionToken(user: User): string {
   ).toString('base64url');
   const sig = signPayload(payloadB64);
   const token = `${payloadB64}.${sig}`;
-  sessions.set(token, user);
+  saveSession(token, user.email);
   return token;
 }
 
@@ -229,13 +344,13 @@ function clearAuthCookie(res: Response) {
 }
 
 function getUserFromToken(token: string | null | undefined): User | null {
-  if (!token || revokedTokens.has(token)) {
+  if (!token || isTokenRevoked(token)) {
     return null;
   }
-  const existing = sessions.get(token);
+  const existing = getSession(token);
   if (existing) {
-    const dbUser = users.get(existing.email);
-    return dbUser || existing;
+    const dbUser = getUserByEmail(existing.email);
+    if (dbUser) return dbUser;
   }
   try {
     const parts = token.split('.');
@@ -248,14 +363,13 @@ function getUserFromToken(token: string | null | undefined): User | null {
     }
     const decoded = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8'));
     if (decoded && typeof decoded.email === 'string') {
-      const existingUser = users.get(decoded.email.toLowerCase());
+      const existingUser = getUserByEmail(decoded.email.toLowerCase());
       if (existingUser) {
-        sessions.set(token, existingUser);
+        saveSession(token, existingUser.email);
         return existingUser;
       }
       if (parts.length === 2) {
-        const user: User = {
-          id: userIdCounter++,
+        const newUser = saveUser({
           name: decoded.name || 'User',
           email: decoded.email.toLowerCase(),
           password: '',
@@ -265,10 +379,9 @@ function getUserFromToken(token: string | null | undefined): User | null {
           course: decoded.role === 'student' ? 'SE Computer Engineering' : undefined,
           verified: true,
           createdAt: new Date(),
-        };
-        users.set(user.email, user);
-        sessions.set(token, user);
-        return user;
+        });
+        saveSession(token, newUser.email);
+        return newUser;
       }
     }
   } catch {
@@ -310,6 +423,19 @@ function isRecordingPublished(rec: Recording): boolean {
   return rec.published === true && rec.facultyStatus === 'PUBLISHED';
 }
 
+function canUserAccessBox(user: User | null, box: StorageBox): boolean {
+  if (!user) return false;
+  if (user.role === 'faculty') return true;
+
+  const allowedStudents = Array.isArray(box.allowedStudents) ? box.allowedStudents : [];
+  if (allowedStudents.length === 0 || allowedStudents.includes('ALL') || allowedStudents.includes('*')) {
+    return true;
+  }
+
+  const userEmail = (user.email || '').toLowerCase().trim();
+  return allowedStudents.map(s => String(s).toLowerCase().trim()).includes(userEmail);
+}
+
 function canUserAccessRecording(user: User | null, rec: Recording): boolean {
   if (!user) return false;
   if (user.role === 'faculty') return true;
@@ -319,9 +445,27 @@ function canUserAccessRecording(user: User | null, rec: Recording): boolean {
     return false;
   }
 
+  // Check specific student emails if configured
+  const allowedStudents = Array.isArray(rec.allowedStudents) ? rec.allowedStudents : [];
+  if (allowedStudents.length > 0 && !allowedStudents.includes('ALL') && !allowedStudents.includes('*')) {
+    const userEmail = (user.email || '').toLowerCase().trim();
+    if (allowedStudents.map(s => String(s).toLowerCase().trim()).includes(userEmail)) {
+      return true;
+    }
+    return false;
+  }
+
+  // If assigned to a storage box that restricts students
+  if (rec.storageBoxId) {
+    const box = getStorageBoxById(rec.storageBoxId);
+    if (box && !canUserAccessBox(user, box)) {
+      return false;
+    }
+  }
+
   const allowed = Array.isArray(rec.allowedAccess) ? rec.allowedAccess : [];
   if (allowed.length === 0) {
-    return false;
+    return true;
   }
 
   const allowedLower = allowed.map(a => String(a).trim().toLowerCase()).filter(Boolean);
@@ -373,15 +517,8 @@ function formatListeningDuration(totalSeconds: number): string {
 
 function recordLecturePlayEvent(rec: Recording, user: User | null, listenedSeconds?: number) {
   if (user && user.role === 'student' && user.email) {
-    let set = accessedStudentsPerLecture.get(rec.id);
-    if (!set) {
-      set = new Set<string>();
-      accessedStudentsPerLecture.set(rec.id, set);
-    }
-    if (!set.has(user.email)) {
-      set.add(user.email);
-      rec.studentsAccessed = (rec.studentsAccessed || 0) + 1;
-    }
+    recordStudentAccess(rec.id, user.email);
+    rec.studentsAccessed = getAccessedStudentsForLecture(rec.id).size;
   }
   if (!rec.studentsAccessed || rec.studentsAccessed < 1) {
     rec.studentsAccessed = 1;
@@ -404,6 +541,7 @@ function recordLecturePlayEvent(rec: Recording, user: User | null, listenedSecon
   rec.playsCount = prevPlays + 1;
   rec.totalListeningSeconds = prevTotalSec + eventSec;
   rec.avgListeningTime = formatListeningDuration(rec.totalListeningSeconds / rec.playsCount);
+  updateRecording(rec);
 }
 
 function formatDateTime(date: Date, userTz?: string): string {
@@ -709,7 +847,7 @@ function validateAudioPayload(
 }
 
 function toStorageBoxDto(box: StorageBox, userTz?: string, user?: User | null): StorageBoxResponseDto {
-  const allRecs = Array.from(recordings.values()).filter(r => r.storageBoxId === box.id);
+  const allRecs = getAllRecordings().filter(r => r.storageBoxId === box.id);
   const publishedRecs = allRecs.filter(r =>
     user && user.role === 'student' ? canUserAccessRecording(user, r) : isRecordingPublished(r)
   );
@@ -722,6 +860,7 @@ function toStorageBoxDto(box: StorageBox, userTz?: string, user?: User | null): 
     description: box.description || '',
     createdBy: box.createdBy || 'Faculty',
     facultyId: box.facultyId,
+    allowedStudents: Array.isArray(box.allowedStudents) ? box.allowedStudents : [],
     recordingCount: allRecs.length,
     publishedRecordingCount: publishedRecs.length,
     createdAt: formatDateTime(createdDate, userTz),
@@ -739,13 +878,14 @@ function toRecordingDto(recording: Recording, userTz?: string): RecordingRespons
     recording.summary = stripModelLine(recording.summary);
   }
 
-  const hasAudio = Boolean(recording.audioData && recording.audioData.length > 0);
+  const resolvedPath = resolveAudioPath(recording.audioFilePath);
+  const hasAudio = Boolean(resolvedPath && fs.existsSync(resolvedPath));
   const createdAtDate = recording.createdAt instanceof Date ? recording.createdAt : new Date(recording.createdAt || Date.now());
   const isoStr = createdAtDate.toISOString();
 
   let boxName: string | null = null;
   if (recording.storageBoxId) {
-    const box = storageBoxes.get(Number(recording.storageBoxId));
+    const box = getStorageBoxById(Number(recording.storageBoxId));
     if (box) {
       boxName = box.name;
     }
@@ -801,6 +941,7 @@ function toRecordingDto(recording: Recording, userTz?: string): RecordingRespons
     allowedAccess: Array.isArray(recording.allowedAccess)
       ? recording.allowedAccess
       : ['SE Computer Engineering', 'Data Structures', 'AI & Machine Learning'],
+    allowedStudents: Array.isArray(recording.allowedStudents) ? recording.allowedStudents : [],
     studentsAccessed,
     playsCount,
     avgListeningTime,
@@ -1087,9 +1228,10 @@ async function transcribeAudioBuffer(
   if (ai) {
     const base64Audio = audioBuffer.toString('base64');
     const candidateModels = [
-      'gemini-2.5-flash',
-      'gemini-3-flash-preview',
-      'gemini-3.1-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-3.7-flash',
+      'gemini-3.5-flash',
+      'gemini-flash-latest',
     ];
 
     for (const modelName of candidateModels) {
@@ -1097,31 +1239,29 @@ async function transcribeAudioBuffer(
         const rawText = await callWithRetry(async () => {
           const apiCall = ai.models.generateContent({
             model: modelName,
-            contents: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: cleanMime,
-                    data: base64Audio,
-                  },
+            contents: [
+              {
+                inlineData: {
+                  mimeType: cleanMime,
+                  data: base64Audio,
                 },
-                {
-                  text: [
-                    'You are a strict, verbatim academic speech-to-text transcription system.',
-                    'Transcribe ONLY the actual spoken words heard in this audio recording.',
-                    'CRITICAL RULES:',
-                    '1. Preserve the speaker’s exact words, technical terminology, definitions, formulas, and examples.',
-                    '2. Format with accurate punctuation, sentence boundaries, and clean paragraph breaks.',
-                    '3. Automatically detect the spoken language and transcribe accurately.',
-                    '4. NEVER invent, guess, extrapolate, or add information that is not spoken in the audio.',
-                    '5. If the audio contains only silence, static, a pure tone, music, or unintelligible noise with no clear human speech, output the exact token: [NO_SPEECH_DETECTED]',
-                    '6. Output ONLY the transcript text (or [NO_SPEECH_DETECTED]) with no introductory or concluding remarks.',
-                  ].join('\n'),
-                },
-              ],
-            },
+              },
+              {
+                text: [
+                  'You are a strict, verbatim academic speech-to-text transcription system.',
+                  'Transcribe ONLY the actual spoken words heard in this audio recording.',
+                  'CRITICAL RULES:',
+                  '1. Preserve the speaker’s exact words, technical terminology, definitions, formulas, and examples.',
+                  '2. Format with accurate punctuation, sentence boundaries, and clean paragraph breaks.',
+                  '3. Automatically detect the spoken language and transcribe accurately.',
+                  '4. NEVER invent, guess, extrapolate, or add information that is not spoken in the audio.',
+                  '5. If the audio contains only silence, static, a pure tone, music, or unintelligible noise with no clear human speech, output the exact token: [NO_SPEECH_DETECTED]',
+                  '6. Output ONLY the transcript text (or [NO_SPEECH_DETECTED]) with no introductory or concluding remarks.',
+                ].join('\n'),
+              },
+            ],
           });
-          const response = await withTimeout(apiCall, 30000);
+          const response = await withTimeout(apiCall, 35000);
           return response.text?.trim() || '';
         }, 1, 1000);
 
@@ -1187,7 +1327,18 @@ async function transcribeAudioBuffer(
     }
   }
 
-  // 3. Fallback to live speech hint if available
+  // 3. Tertiary: Local Python Whisper engine
+  try {
+    const pyText = await transcribeWithPythonWhisper(audioBuffer, filename);
+    if (pyText && pyText.trim()) {
+      const quality = validateTranscriptQuality(pyText);
+      if (quality.valid) {
+        return pyText.trim();
+      }
+    }
+  } catch {}
+
+  // 4. Quaternary: Live speech hint from browser speech recognition
   if (liveSpeechHint && liveSpeechHint.trim()) {
     const quality = validateTranscriptQuality(liveSpeechHint);
     if (quality.valid) {
@@ -1195,21 +1346,34 @@ async function transcribeAudioBuffer(
     }
   }
 
-  throw new Error(
-    `Speech-to-text transcription could not recognize valid speech from the audio recording (${errors[0] || 'No speech recognition service succeeded'}). Please ensure you spoke clearly into the microphone and try again.`
-  );
+  // 5. Graceful Resilient Fallback: Never delete or reject valid lecture audio
+  const hasGeminiKey = Boolean(getGeminiApiKey());
+  if (!hasGeminiKey) {
+    return '[Transcription Pending: Gemini API Key is not configured on the server. Please enter your Gemini API Key in Settings and click "Regenerate AI" in Review, or edit this transcript directly.]';
+  }
+
+  const primaryErr = errors[0] || 'Speech recognition model could not process audio';
+  return `[Transcription Pending: Automatic speech recognition could not detect clear words (${primaryErr}). You can click "Regenerate AI" in Review, or edit the transcript directly.]`;
 }
 
 async function generateAiSummary(transcript: string, mode = 'Medium'): Promise<string> {
-  const transcriptCheck = validateTranscriptQuality(transcript);
-  if (!transcriptCheck.valid) {
-    throw new Error(
-      transcriptCheck.reason ||
-        'Cannot generate AI summary because the lecture transcript is empty, incomplete, or invalid.'
-    );
+  if (!transcript || !transcript.trim()) {
+    return '[AI Summary pending: Lecture transcript is empty.]';
   }
 
   const cleanedTranscript = transcript.trim();
+  if (
+    cleanedTranscript.startsWith('[Transcription Pending:') ||
+    cleanedTranscript.startsWith('[Audio recording saved')
+  ) {
+    return '[AI Summary pending: Configure your Gemini API Key in Settings and click "Regenerate AI" in Review to generate structured lecture notes.]';
+  }
+
+  const transcriptCheck = validateTranscriptQuality(transcript);
+  if (!transcriptCheck.valid) {
+    return `[AI Summary pending: ${transcriptCheck.reason || 'Transcript quality insufficient'}. Configure Gemini API Key in Settings or edit the transcript manually.]`;
+  }
+
   const ai = getGeminiClient();
 
   if (ai) {
@@ -1220,7 +1384,12 @@ async function generateAiSummary(transcript: string, mode = 'Medium'): Promise<s
         ? 'Provide thorough revision notes capturing all technical explanations, definitions, and examples present in the transcript.'
         : 'Provide clear, well-structured bullet points suitable for college exam revision.';
 
-    const summaryModels = ['gemini-2.5-flash', 'gemini-3-flash-preview', 'gemini-3.1-flash-lite'];
+    const summaryModels = [
+      'gemini-3.8-flash',
+      'gemini-3.7-flash',
+      'gemini-3.5-flash',
+      'gemini-flash-latest',
+    ];
     for (const modelName of summaryModels) {
       try {
         const summaryCall = ai.models.generateContent({
@@ -1255,7 +1424,7 @@ async function generateAiSummary(transcript: string, mode = 'Medium'): Promise<s
         const response = await withTimeout(summaryCall, 20000);
         const summaryText = stripModelLine(response.text?.trim() || '');
         if (summaryText.includes('[INSUFFICIENT_TRANSCRIPT]')) {
-          throw new Error('The transcript is too brief or unclear to generate a reliable lecture summary.');
+          continue;
         }
 
         const relevance = validateSummaryRelevance(cleanedTranscript, summaryText);
@@ -1263,21 +1432,21 @@ async function generateAiSummary(transcript: string, mode = 'Medium'): Promise<s
           return summaryText;
         }
       } catch (err: any) {
-        if (err?.message?.includes('too brief or unclear')) {
-          throw err;
-        }
-        // Try next Gemini model or deterministic transcript-grounded extractor
+        // Continue to next model or fallback
       }
     }
   }
 
   // Fallback: Deterministic extractive summary built strictly from the actual transcript sentences
-  const deterministicSummary = generateSummaryFromTranscriptDeterministically(cleanedTranscript, mode);
-  const relevance = validateSummaryRelevance(cleanedTranscript, deterministicSummary);
-  if (!relevance.valid) {
-    throw new Error(relevance.reason || 'Summary validation failed against the source transcript.');
-  }
-  return deterministicSummary;
+  try {
+    const deterministicSummary = generateSummaryFromTranscriptDeterministically(cleanedTranscript, mode);
+    const relevance = validateSummaryRelevance(cleanedTranscript, deterministicSummary);
+    if (relevance.valid) {
+      return deterministicSummary;
+    }
+  } catch {}
+
+  return '[AI Summary pending: Configure your Gemini API Key in Settings to generate lecture notes.]';
 }
 
 // ── SMTP Email Service (Transporter, Resilient Delivery & Fallbacks) ──────
@@ -1289,16 +1458,12 @@ interface SmtpConfig {
   user: string;
   pass: string;
   from: string;
+  googleClientId?: string;
+  googleClientSecret?: string;
   isConfigured: boolean;
 }
 
 const SMTP_CONFIG_FILE = path.join(__dirname, '.smtp-config.json');
-
-function isValidCredential(val: string | null | undefined): boolean {
-  if (!val) return false;
-  const trimmed = val.trim().toLowerCase();
-  return trimmed !== '' && trimmed !== 'none' && trimmed !== 'null' && trimmed !== 'undefined';
-}
 
 function readSavedSmtpConfig(): Partial<SmtpConfig> {
   try {
@@ -1333,9 +1498,11 @@ function getSmtpConfig(): SmtpConfig {
   const port = Number(saved.port || process.env.SMTP_PORT || process.env.VAANI_MAIL_PORT) || 587;
   const secure = saved.secure !== undefined ? Boolean(saved.secure) : (process.env.SMTP_SECURE === 'true' || port === 465);
   const from = (saved.from || process.env.SMTP_FROM || process.env.VAANI_MAIL_FROM || (user ? `"Vaani AI" <${user}>` : '"Vaani AI" <noreply@vaani.ai>')).trim();
+  const googleClientId = (saved.googleClientId || process.env.GOOGLE_CLIENT_ID || '').trim();
+  const googleClientSecret = (saved.googleClientSecret || process.env.GOOGLE_CLIENT_SECRET || '').trim();
   const isConfigured = isValidCredential(user) && isValidCredential(pass);
 
-  return { host, port, secure, user, pass, from, isConfigured };
+  return { host, port, secure, user, pass, from, googleClientId, googleClientSecret, isConfigured };
 }
 
 function createSmtpTransporter(cfg: SmtpConfig, overridePort?: number, overrideSecure?: boolean) {
@@ -1462,243 +1629,9 @@ async function sendOtpEmail(
   }
 }
 
-// ── WAV Tone Generator & Database Seeder ─────────────────────────────────
+// ── Initialize SQLite Database & Seed If Empty ───────────────────────────
+seedDatabaseIfEmpty();
 
-function generateToneWav(frequencyHz: number, durationSeconds: number): Buffer {
-  const sampleRate = 44100;
-  const numSamples = Math.floor(durationSeconds * sampleRate);
-  const dataSize = numSamples * 2;
-  const buffer = Buffer.alloc(44 + dataSize);
-
-  buffer.write('RIFF', 0, 'ascii');
-  buffer.writeInt32LE(36 + dataSize, 4);
-  buffer.write('WAVE', 8, 'ascii');
-
-  buffer.write('fmt ', 12, 'ascii');
-  buffer.writeInt32LE(16, 16);
-  buffer.writeInt16LE(1, 20);
-  buffer.writeInt16LE(1, 22);
-  buffer.writeInt32LE(sampleRate, 24);
-  buffer.writeInt32LE(sampleRate * 2, 28);
-  buffer.writeInt16LE(2, 32);
-  buffer.writeInt16LE(16, 34);
-
-  buffer.write('data', 36, 'ascii');
-  buffer.writeInt32LE(dataSize, 40);
-
-  for (let i = 0; i < numSamples; i++) {
-    const t = i / sampleRate;
-    const envelope = Math.min(1.0, (numSamples - i) / (sampleRate * 0.1));
-    const sample = Math.round(Math.sin(2.0 * Math.PI * frequencyHz * t) * 16384 * envelope);
-    buffer.writeInt16LE(sample, 44 + i * 2);
-  }
-
-  return buffer;
-}
-
-function seedDatabase() {
-  const defaultEmail = 'programmmariojs8@gmail.com';
-  users.set(defaultEmail, {
-    id: userIdCounter++,
-    name: 'Mario',
-    email: defaultEmail,
-    password: hashPassword('password123'),
-    role: 'student',
-    course: 'SE Computer Engineering',
-    verified: true,
-    createdAt: new Date(),
-  });
-
-  const facultyEmail = 'faculty@vaani.edu';
-  users.set(facultyEmail, {
-    id: userIdCounter++,
-    name: 'Dr. Ananya Sharma',
-    email: facultyEmail,
-    password: hashPassword('password123'),
-    role: 'faculty',
-    facultyId: 'FAC-2026-104',
-    department: 'Department of Computer Engineering & AI',
-    avatarUrl: '',
-    verified: true,
-    createdAt: new Date(),
-  });
-
-  const studentDemoEmail = 'student@vaani.edu';
-  users.set(studentDemoEmail, {
-    id: userIdCounter++,
-    name: 'Aarav Patel',
-    email: studentDemoEmail,
-    password: hashPassword('password123'),
-    role: 'student',
-    course: 'SE Computer Engineering',
-    verified: true,
-    createdAt: new Date(),
-  });
-
-  if (storageBoxes.size === 0) {
-    const box1: StorageBox = {
-      id: storageBoxIdCounter++,
-      name: 'Artificial Intelligence & ML',
-      description: 'Foundations of AI, machine learning algorithms, deep neural nets, and practical applications.',
-      createdBy: 'Dr. Ananya Sharma',
-      facultyId: 'FAC-2026-104',
-      createdAt: new Date(Date.now() - 7 * 86400 * 1000),
-      updatedAt: new Date(Date.now() - 3 * 3600 * 1000),
-    };
-    const box2: StorageBox = {
-      id: storageBoxIdCounter++,
-      name: 'Data Structures & Algorithms',
-      description: 'Hierarchical tree structures, graph traversal algorithms, balancing heuristics, and complexity bounds.',
-      createdBy: 'Prof. Verma',
-      facultyId: 'FAC-2026-102',
-      createdAt: new Date(Date.now() - 5 * 86400 * 1000),
-      updatedAt: new Date(Date.now() - 2 * 3600 * 1000),
-    };
-    const box3: StorageBox = {
-      id: storageBoxIdCounter++,
-      name: 'Innovation & Research Lab',
-      description: 'Interactive brainstorming sessions, audio synthesis systems, and rapid prototype reviews.',
-      createdBy: 'Dr. Nair',
-      facultyId: 'FAC-2026-108',
-      createdAt: new Date(Date.now() - 3 * 86400 * 1000),
-      updatedAt: new Date(Date.now() - 1 * 3600 * 1000),
-    };
-
-    storageBoxes.set(box1.id, box1);
-    storageBoxes.set(box2.id, box2);
-    storageBoxes.set(box3.id, box3);
-  }
-
-  if (recordings.size === 0) {
-    const sampleAudio1 = generateToneWav(440, 3);
-    const sampleAudio2 = generateToneWav(523.25, 3);
-    const sampleAudio3 = generateToneWav(659.25, 3);
-    const sampleAudio4 = generateToneWav(392.0, 3);
-
-    const rec1: Recording = {
-      id: recordingIdCounter++,
-      title: 'Lecture — AI and ML Basics',
-      storageBoxId: 1,
-      lectureName: 'Introduction to AI & ML',
-      professorName: 'Dr. Ananya Sharma',
-      subject: 'Artificial Intelligence & ML',
-      classCourse: 'SE Computer Engineering',
-      lectureDate: new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10),
-      description: 'Foundational lecture covering supervised, unsupervised, and reinforcement learning paradigms with real-world applications.',
-      duration: '45:12',
-      createdAt: new Date(Date.now() - 3 * 3600 * 1000),
-      status: 'Completed',
-      facultyStatus: 'PUBLISHED',
-      published: true,
-      isFacultyLecture: true,
-      allowedAccess: ['SE Computer Engineering', 'TE Computer Engineering', 'AI & Machine Learning', 'Data Structures'],
-      studentsAccessed: 42,
-      playsCount: 118,
-      avgListeningTime: '38m 45s',
-      transcript:
-        'Artificial Intelligence is a broad field of computer science focused on creating systems that can perform tasks that normally require human intelligence. Machine Learning is a subset of AI where systems learn patterns from data.\n\nThere are three major types of machine learning: supervised learning, unsupervised learning, and reinforcement learning. Each approach has different applications across healthcare, finance, education, and autonomous systems.',
-      summary:
-        'This lecture introduces the fundamental concepts of Artificial Intelligence and Machine Learning. It explains the difference between AI, ML, and Deep Learning, covering supervised, unsupervised, and reinforcement learning.\n\nKey Points:\n• AI is broader; ML is a subset of AI.\n• ML enables systems to learn from data.\n• Types: supervised, unsupervised and reinforcement.\n• Data quality is crucial for accurate predictions.',
-      audioFilename: 'lecture_ai_ml.wav',
-      audioContentType: 'audio/wav',
-      audioData: sampleAudio1,
-    };
-
-    const rec2: Recording = {
-      id: recordingIdCounter++,
-      title: 'Data Structures — Trees & Graph Traversals',
-      storageBoxId: 2,
-      lectureName: 'Data Structures & Algorithms',
-      professorName: 'Prof. Verma',
-      subject: 'Data Structures',
-      classCourse: 'SE Computer Engineering',
-      lectureDate: new Date(Date.now() - 2 * 3600 * 1000).toISOString().slice(0, 10),
-      description: 'Deep dive into Binary Search Trees, AVL balancing rotations, BFS and DFS graph traversal complexity analysis.',
-      duration: '32:05',
-      createdAt: new Date(Date.now() - 2 * 3600 * 1000),
-      status: 'Completed',
-      facultyStatus: 'PUBLISHED',
-      published: true,
-      isFacultyLecture: true,
-      allowedAccess: ['SE Computer Engineering', 'Data Structures'],
-      studentsAccessed: 36,
-      playsCount: 89,
-      avgListeningTime: '27m 15s',
-      transcript:
-        "During today's lecture on Data Structures, we examined hierarchical data representations using binary trees and graphs. Breadth-First Search explores nodes level by level using a FIFO queue, whereas Depth-First Search explores branches deeply using a stack or recursion.",
-      summary:
-        'Summary of Tree and Graph Traversal techniques and asymptotic time complexity.\n\nKey Points:\n• Binary Search Trees allow O(log n) average search and insertion.\n• BFS uses a Queue and finds shortest paths in unweighted graphs.\n• DFS uses a Stack/recursion and is used in cycle detection and topological sorting.',
-      audioFilename: 'data_structures_trees.wav',
-      audioContentType: 'audio/wav',
-      audioData: sampleAudio2,
-    };
-
-    const rec3: Recording = {
-      id: recordingIdCounter++,
-      title: 'Project Ideas Brainstorming',
-      storageBoxId: 3,
-      lectureName: 'Innovation Lab',
-      professorName: 'Dr. Nair',
-      subject: 'Innovation Lab',
-      classCourse: 'SE Computer Engineering',
-      lectureDate: new Date(Date.now() - 1 * 3600 * 1000).toISOString().slice(0, 10),
-      description: 'Interactive brainstorming session covering automated audio transcription, key point summarization, and voice AI interfaces.',
-      duration: '28:40',
-      createdAt: new Date(Date.now() - 1 * 3600 * 1000),
-      status: 'Completed',
-      facultyStatus: 'PUBLISHED',
-      published: true,
-      isFacultyLecture: true,
-      allowedAccess: ['SE Computer Engineering', 'BE Computer Engineering', 'Innovation Lab'],
-      studentsAccessed: 29,
-      playsCount: 64,
-      avgListeningTime: '24m 10s',
-      transcript:
-        'Brainstorming session covering automated audio transcription, key point summarization, export features, and real-time speech processing.',
-      summary:
-        'Creative brainstorming ideas for Vaani AI audio platform.\n\nKey Points:\n• Real-time speech recognition.\n• Auto export to PDF/Markdown.\n• Audio playback & annotation.',
-      audioFilename: 'brainstorming.wav',
-      audioContentType: 'audio/wav',
-      audioData: sampleAudio3,
-    };
-
-    const rec4: Recording = {
-      id: recordingIdCounter++,
-      title: 'Neural Networks & Backpropagation (Draft Review)',
-      storageBoxId: 1,
-      lectureName: 'Deep Learning Architectures',
-      professorName: 'Dr. Ananya Sharma',
-      subject: 'Deep Learning',
-      classCourse: 'BE Computer Engineering',
-      lectureDate: new Date().toISOString().slice(0, 10),
-      description: 'Upcoming lecture on multi-layer perceptrons, activation functions, gradient descent, and chain rule backpropagation.',
-      duration: '39:50',
-      createdAt: new Date(Date.now() - 1800 * 1000),
-      status: 'Completed',
-      facultyStatus: 'READY',
-      published: false,
-      isFacultyLecture: true,
-      allowedAccess: ['BE Computer Engineering', 'AI & Machine Learning'],
-      studentsAccessed: 0,
-      playsCount: 2,
-      avgListeningTime: '18m 00s',
-      transcript:
-        'Welcome to Deep Learning Architectures. Today we derive the backpropagation algorithm from first principles using the chain rule of calculus. Each layer computes a weighted linear combination followed by a non-linear activation such as ReLU or GELU.\n\nDuring training, the loss gradient propagates backward from the output layer to update weights via Stochastic Gradient Descent or Adam optimization.',
-      summary:
-        '✥ EXECUTIVE SUMMARY\nComprehensive walkthrough of multi-layer neural networks, forward propagation, and gradient computation via backpropagation.\n\n✥ KEY POINTS & INSIGHTS\n• Forward pass computes activations layer by layer.\n• Loss functions quantify prediction error.\n• Backpropagation applies the chain rule to compute gradients efficiently.\n• Adam optimizer adapts learning rates per parameter.',
-      audioFilename: 'neural_networks_draft.wav',
-      audioContentType: 'audio/wav',
-      audioData: sampleAudio4,
-    };
-
-    recordings.set(rec1.id, rec1);
-    recordings.set(rec2.id, rec2);
-    recordings.set(rec3.id, rec3);
-    recordings.set(rec4.id, rec4);
-  }
-}
-
-seedDatabase();
 
 // ── AuthFilter Middleware ────────────────────────────────────────────────
 
@@ -1708,7 +1641,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
   }
 
   const reqPath = req.path;
-  if (!reqPath.startsWith('/api/') || reqPath.startsWith('/api/auth/') || reqPath.endsWith('/audio')) {
+  if (
+    !reqPath.startsWith('/api/') ||
+    reqPath.startsWith('/api/auth/') ||
+    reqPath.startsWith('/api/config/') ||
+    reqPath.endsWith('/audio')
+  ) {
     return next();
   }
 
@@ -1746,26 +1684,24 @@ app.post('/api/auth/signup', async (req: Request, res: Response) => {
     email = email.trim().toLowerCase();
     const userRole: 'faculty' | 'student' = role === 'faculty' ? 'faculty' : 'student';
 
-    const existing = users.get(email);
+    const existing = getUserByEmail(email);
     if (existing) {
-      existing.name = name;
-      existing.password = hashPassword(password);
-      existing.role = userRole;
-      if (userRole === 'faculty') {
-        existing.department = department || existing.department || 'Computer Engineering & AI';
-        existing.facultyId = facultyId || existing.facultyId || `FAC-2026-${100 + existing.id}`;
-      }
-      existing.verified = false;
-      users.set(email, existing);
+      saveUser({
+        ...existing,
+        name,
+        password: hashPassword(password),
+        role: userRole,
+        department: userRole === 'faculty' ? (department || existing.department || 'Computer Engineering & AI') : undefined,
+        facultyId: userRole === 'faculty' ? (facultyId || existing.facultyId || `FAC-2026-${100 + existing.id}`) : undefined,
+        verified: false,
+      });
     } else {
-      const newId = userIdCounter++;
-      users.set(email, {
-        id: newId,
+      saveUser({
         name,
         email,
         password: hashPassword(password),
         role: userRole,
-        facultyId: userRole === 'faculty' ? (facultyId || `FAC-2026-${100 + newId}`) : undefined,
+        facultyId: userRole === 'faculty' ? (facultyId || 'FAC-2026-101') : undefined,
         department: userRole === 'faculty' ? (department || 'Computer Engineering & AI') : undefined,
         course: userRole === 'student' ? 'SE Computer Engineering' : undefined,
         verified: false,
@@ -1775,13 +1711,7 @@ app.post('/api/auth/signup', async (req: Request, res: Response) => {
 
     const otpCode = generateOtpCode();
     const now = new Date();
-    otps.set(email, {
-      id: otpIdCounter++,
-      email,
-      code: otpCode,
-      createdAt: now,
-      expiresAt: new Date(now.getTime() + 5 * 60 * 1000),
-    });
+    setOtp(email, otpCode, now, new Date(now.getTime() + 5 * 60 * 1000));
 
     console.log('=================================================');
     console.log(` Vaani Verification Code for [${email}]: ${otpCode}`);
@@ -1820,16 +1750,10 @@ app.post('/api/auth/resend-otp', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email is required.' });
     }
     email = email.trim().toLowerCase();
-    const user = users.get(email);
+    const user = getUserByEmail(email);
     const otpCode = generateOtpCode();
     const now = new Date();
-    otps.set(email, {
-      id: otpIdCounter++,
-      email,
-      code: otpCode,
-      createdAt: now,
-      expiresAt: new Date(now.getTime() + 5 * 60 * 1000),
-    });
+    setOtp(email, otpCode, now, new Date(now.getTime() + 5 * 60 * 1000));
 
     console.log('=================================================');
     console.log(` Vaani RESEND Code for [${email}]: ${otpCode}`);
@@ -1859,6 +1783,8 @@ app.get('/api/auth/smtp-status', (_req: Request, res: Response) => {
     secure: cfg.secure,
     user: maskedUser,
     from: cfg.from,
+    googleClientId: cfg.googleClientId || '',
+    hasGoogleAuth: Boolean(cfg.googleClientId),
   });
 });
 
@@ -1899,36 +1825,141 @@ app.post('/api/auth/test-smtp', async (req: Request, res: Response) => {
 
 app.post('/api/auth/save-smtp', (req: Request, res: Response) => {
   try {
-    const { host, port, user, pass, secure, from, clear } = req.body || {};
+    const { host, port, user, pass, secure, from, googleClientId, googleClientSecret, clear } = req.body || {};
 
     if (clear) {
       writeSavedSmtpConfig({});
-      return res.status(200).json({ message: 'SMTP configuration cleared.' });
+      return res.status(200).json({ message: 'SMTP and Google configuration cleared.' });
     }
 
-    if (!user || !pass) {
-      return res.status(400).json({ error: 'Username/Email and Password are required.' });
-    }
-
+    const existingCfg = readSavedSmtpConfig();
     const newCfg: Partial<SmtpConfig> = {
-      host: typeof host === 'string' && host.trim() ? host.trim() : 'smtp.gmail.com',
-      port: Number(port) || 587,
-      user: String(user).trim(),
-      pass: String(pass).trim(),
-      secure: Boolean(secure),
-      from: typeof from === 'string' && from.trim() ? from.trim() : `"Vaani AI" <${String(user).trim()}>`,
+      ...existingCfg,
+      host: typeof host === 'string' && host.trim() ? host.trim() : (existingCfg.host || 'smtp.gmail.com'),
+      port: Number(port) || existingCfg.port || 587,
+      user: user !== undefined ? String(user).trim() : (existingCfg.user || ''),
+      pass: pass !== undefined ? String(pass).trim() : (existingCfg.pass || ''),
+      secure: secure !== undefined ? Boolean(secure) : Boolean(existingCfg.secure),
+      from: typeof from === 'string' && from.trim() ? from.trim() : (existingCfg.from || `"Vaani AI" <${String(user || existingCfg.user || '').trim()}>`),
+      googleClientId: googleClientId !== undefined ? String(googleClientId).trim() : (existingCfg.googleClientId || ''),
+      googleClientSecret: googleClientSecret !== undefined ? String(googleClientSecret).trim() : (existingCfg.googleClientSecret || ''),
     };
 
     writeSavedSmtpConfig(newCfg);
     return res.status(200).json({
-      message: 'SMTP settings saved successfully.',
-      configured: true,
+      message: 'SMTP & Google Auth settings saved successfully.',
+      configured: Boolean(newCfg.user && newCfg.pass),
       host: newCfg.host,
       port: newCfg.port,
       user: newCfg.user?.replace(/^(.{2})(.*)(@.*)$/, '$1***$3'),
+      googleClientId: newCfg.googleClientId || '',
+      hasGoogleAuth: Boolean(newCfg.googleClientId),
     });
   } catch (err: any) {
-    return res.status(500).json({ error: err?.message || 'Failed to save SMTP configuration.' });
+    return res.status(500).json({ error: err?.message || 'Failed to save configuration.' });
+  }
+});
+
+// ── Gemini AI Configuration Endpoints ─────────────────────────────────────
+
+app.get('/api/config/gemini', (_req: Request, res: Response) => {
+  const key = getGeminiApiKey();
+  const configured = Boolean(key && key.trim());
+  let maskedKey = '';
+  if (configured && key) {
+    const k = key.trim();
+    maskedKey = k.length > 8 ? `${k.slice(0, 4)}••••••••${k.slice(-4)}` : '••••••••';
+  }
+  return res.status(200).json({
+    configured,
+    maskedKey,
+    activeModel: 'gemini-3.8-flash',
+    provider: 'Google Gemini',
+    hasWhisperPython: fs.existsSync(path.join(__dirname, 'backend', 'transcribe_whisper.py')),
+    hasGroqWhisper: Boolean(process.env.GROQ_API_KEY || process.env.OPENAI_API_KEY),
+  });
+});
+
+app.post('/api/config/gemini', async (req: Request, res: Response) => {
+  try {
+    const { apiKey, clear } = req.body || {};
+
+    if (clear) {
+      delete process.env.GEMINI_API_KEY;
+      try { setSystemSetting('gemini_api_key', ''); } catch {}
+      writeSavedGeminiConfig({});
+      try {
+        if (fs.existsSync(ENV_FILE)) {
+          let envContent = fs.readFileSync(ENV_FILE, 'utf8');
+          envContent = envContent.replace(/^GEMINI_API_KEY=.*$/m, 'GEMINI_API_KEY=');
+          fs.writeFileSync(ENV_FILE, envContent, 'utf8');
+        }
+      } catch {}
+      return res.status(200).json({
+        success: true,
+        configured: false,
+        message: 'Gemini API Key removed.',
+      });
+    }
+
+    if (!apiKey || typeof apiKey !== 'string' || !apiKey.trim()) {
+      return res.status(400).json({ error: 'Please enter a valid Gemini API key.' });
+    }
+
+    const trimmedKey = apiKey.trim();
+
+    // Verify key against Gemini API
+    const testResult = await verifyGeminiApiKey(trimmedKey);
+    if (!testResult.valid) {
+      return res.status(400).json({
+        error: `Gemini API Key verification failed: ${testResult.error || 'Invalid API Key'}. Please check your key from Google AI Studio (aistudio.google.com).`,
+      });
+    }
+
+    // Save key
+    saveGeminiApiKey(trimmedKey, testResult.model || 'gemini-3.8-flash');
+
+    const maskedKey = trimmedKey.length > 8 ? `${trimmedKey.slice(0, 4)}••••••••${trimmedKey.slice(-4)}` : '••••••••';
+    return res.status(200).json({
+      success: true,
+      configured: true,
+      maskedKey,
+      activeModel: testResult.model || 'gemini-3.8-flash',
+      message: `Gemini API Key verified and saved successfully! Connected using model ${testResult.model || 'gemini-3.8-flash'}.`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to update Gemini API configuration.' });
+  }
+});
+
+app.post('/api/config/gemini/test', async (req: Request, res: Response) => {
+  try {
+    const key = (req.body?.apiKey && typeof req.body.apiKey === 'string' && req.body.apiKey.trim())
+      ? req.body.apiKey.trim()
+      : getGeminiApiKey();
+
+    if (!key) {
+      return res.status(400).json({
+        success: false,
+        error: 'No Gemini API Key is currently configured. Please enter an API Key first.',
+      });
+    }
+
+    const testResult = await verifyGeminiApiKey(key);
+    if (testResult.valid) {
+      return res.status(200).json({
+        success: true,
+        message: `Gemini connection verified! Model "${testResult.model || 'gemini-3.8-flash'}" is responding.`,
+        model: testResult.model,
+      });
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: testResult.error || 'Gemini API verification failed.',
+      });
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Test failed.' });
   }
 });
 
@@ -1942,7 +1973,7 @@ app.post('/api/auth/verify-otp', (req: Request, res: Response) => {
     email = String(email).trim().toLowerCase();
     code = String(code).trim();
 
-    const otp = otps.get(email);
+    const otp = getOtp(email);
     if (!otp) {
       return res.status(400).json({ error: 'No verification code found. Please sign up again.' });
     }
@@ -1955,7 +1986,7 @@ app.post('/api/auth/verify-otp', (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid verification code. Please try again.' });
     }
 
-    const user = users.get(email);
+    let user = getUserByEmail(email);
     if (!user) {
       return res.status(400).json({ error: 'User not found. Please sign up again.' });
     }
@@ -1964,8 +1995,8 @@ app.post('/api/auth/verify-otp', (req: Request, res: Response) => {
       user.role = role;
     }
     user.verified = true;
-    users.set(email, user);
-    otps.delete(email);
+    user = saveUser(user);
+    deleteOtp(email);
 
     const token = createSessionToken(user);
     return res.status(200).json({
@@ -1990,53 +2021,25 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
 
     email = email.trim().toLowerCase();
     const requestedRole: 'faculty' | 'student' = role === 'faculty' ? 'faculty' : 'student';
-    let user = users.get(email);
+    let user = getUserByEmail(email);
 
     if (!user) {
-      // Allow seamless login for demo faculty or student accounts if not yet registered
-      const newId = userIdCounter++;
-      const inferredName = requestedRole === 'faculty'
-        ? (email.startsWith('dr.') || email.startsWith('prof') ? email.split('@')[0] : `Prof. ${email.split('@')[0].replace(/[._0-9]/g, ' ').trim() || 'Faculty'}`)
-        : (email.split('@')[0].replace(/[._0-9]/g, ' ').trim() || 'Student');
-      user = {
-        id: newId,
-        name: inferredName.replace(/\b\w/g, c => c.toUpperCase()),
-        email,
-        password: hashPassword(password),
-        role: requestedRole,
-        facultyId: requestedRole === 'faculty' ? `FAC-2026-${100 + newId}` : undefined,
-        department: requestedRole === 'faculty' ? 'Department of Computer Engineering & AI' : undefined,
-        course: requestedRole === 'student' ? 'SE Computer Engineering' : undefined,
-        verified: true,
-        createdAt: new Date(),
-      };
-      users.set(email, user);
+      return res.status(401).json({ error: 'Account not found. Please check your email or sign up first.' });
     }
 
     if (!user.verified) {
-      return res.status(401).json({ error: 'Account not verified. Please sign up again to receive a new code.' });
-    }
-
-    // Allow default seeded users to log in with their own password and update hash
-    if (
-      (email === 'programmmariojs8@gmail.com' || email === 'faculty@vaani.edu' || email === 'student@vaani.edu') &&
-      user.password === hashPassword('password123')
-    ) {
-      user.password = hashPassword(password);
-      users.set(email, user);
+      return res.status(401).json({ error: 'Account not verified. Please complete OTP verification or sign up again.' });
     }
 
     if (!checkPassword(password, user.password)) {
       return res.status(401).json({ error: 'Incorrect password. Please try again.' });
     }
 
-    // Update user's active role to match the role selected on login
-    user.role = requestedRole;
-    if (requestedRole === 'faculty') {
-      if (!user.facultyId) user.facultyId = `FAC-2026-${100 + user.id}`;
-      if (!user.department) user.department = 'Department of Computer Engineering & AI';
+    if (user.role && user.role !== requestedRole) {
+      return res.status(403).json({
+        error: `This account is registered as a ${user.role}. Please select the ${user.role.toUpperCase()} tab to log in.`
+      });
     }
-    users.set(email, user);
 
     const token = createSessionToken(user);
     return res.status(200).json({
@@ -2044,12 +2047,81 @@ app.post('/api/auth/login', (req: Request, res: Response) => {
       name: user.name,
       email: user.email,
       role: user.role,
-      facultyId: user.facultyId || 'FAC-2026-104',
-      department: user.department || 'Department of Computer Engineering & AI',
+      facultyId: user.facultyId || (user.role === 'faculty' ? 'FAC-2026-104' : undefined),
+      department: user.department || (user.role === 'faculty' ? 'Department of Computer Engineering & AI' : undefined),
       avatarUrl: user.avatarUrl || '',
     });
   } catch (err: any) {
     return res.status(401).json({ error: err?.message || 'Login failed.' });
+  }
+});
+
+app.post('/api/auth/google', (req: Request, res: Response) => {
+  try {
+    let { email, name, role, picture, credential } = req.body || {};
+
+    if (credential && typeof credential === 'string') {
+      try {
+        const parts = credential.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+          if (payload && payload.email) {
+            email = payload.email;
+            if (payload.name && !name) name = payload.name;
+            if (payload.picture && !picture) picture = payload.picture;
+          }
+        }
+      } catch {}
+    }
+
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      return res.status(400).json({ error: 'Valid Google email is required.' });
+    }
+
+    email = email.trim().toLowerCase();
+    const requestedRole: 'faculty' | 'student' = role === 'faculty' ? 'faculty' : 'student';
+
+    let user = getUserByEmail(email);
+    if (!user) {
+      const displayName = typeof name === 'string' && name.trim()
+        ? name.trim()
+        : (requestedRole === 'faculty' ? `Prof. ${email.split('@')[0]}` : email.split('@')[0]);
+
+      user = saveUser({
+        name: displayName.replace(/\b\w/g, c => c.toUpperCase()),
+        email,
+        password: hashPassword(crypto.randomBytes(16).toString('hex')),
+        role: requestedRole,
+        facultyId: requestedRole === 'faculty' ? 'FAC-2026-101' : undefined,
+        department: requestedRole === 'faculty' ? 'Department of Computer Engineering & AI' : undefined,
+        course: requestedRole === 'student' ? 'SE Computer Engineering' : undefined,
+        avatarUrl: picture || '',
+        verified: true,
+        createdAt: new Date(),
+      });
+    } else {
+      if (user.role !== requestedRole) {
+        return res.status(403).json({
+          error: `This Google account is registered as a ${user.role}. Please switch to the ${user.role.toUpperCase()} tab to log in.`
+        });
+      }
+      user.verified = true;
+      if (picture && !user.avatarUrl) user.avatarUrl = picture;
+      user = saveUser(user);
+    }
+
+    const token = createSessionToken(user);
+    return res.status(200).json({
+      token,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      facultyId: user.facultyId || (user.role === 'faculty' ? 'FAC-2026-104' : undefined),
+      department: user.department || (user.role === 'faculty' ? 'Department of Computer Engineering & AI' : undefined),
+      avatarUrl: user.avatarUrl || '',
+    });
+  } catch (err: any) {
+    return res.status(400).json({ error: err?.message || 'Google authentication failed.' });
   }
 });
 
@@ -2095,23 +2167,23 @@ app.put('/api/faculty/profile', (req: Request, res: Response) => {
     user.password = hashPassword(newPassword.trim());
   }
 
+  let finalUser = user;
   if (typeof email === 'string' && email.trim() && email.trim().toLowerCase() !== user.email) {
     const newEmail = email.trim().toLowerCase();
-    users.delete(user.email);
-    user.email = newEmail;
-    users.set(newEmail, user);
+    const updated = updateUserEmail(user.email, newEmail, user);
+    if (updated) finalUser = updated;
   } else {
-    users.set(user.email, user);
+    finalUser = saveUser(user);
   }
 
   return res.status(200).json({
     message: 'Faculty profile updated successfully.',
-    name: user.name,
-    email: user.email,
-    role: user.role,
-    facultyId: user.facultyId,
-    department: user.department,
-    avatarUrl: user.avatarUrl || '',
+    name: finalUser.name,
+    email: finalUser.email,
+    role: finalUser.role,
+    facultyId: finalUser.facultyId,
+    department: finalUser.department,
+    avatarUrl: finalUser.avatarUrl || '',
   });
 });
 
@@ -2119,8 +2191,7 @@ app.post('/api/auth/logout', (req: Request, res: Response) => {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7).trim();
-    sessions.delete(token);
-    revokedTokens.add(token);
+    revokeToken(token);
   }
   return res.status(200).json({ message: 'Logged out successfully.' });
 });
@@ -2145,7 +2216,7 @@ app.get('/api/recordings', (req: Request, res: Response) => {
   const roleHeader = (req.headers['x-user-role'] as string || '').toLowerCase();
   const isFaculty = user?.role === 'faculty' || roleHeader === 'faculty' || req.query.role === 'faculty';
 
-  let allRecs = Array.from(recordings.values()).sort((a, b) => b.id - a.id);
+  let allRecs = getAllRecordings();
 
   // IMPORTANT: Only PUBLISHED faculty lectures (or student's personal notes) are visible to students
   if (!isFaculty) {
@@ -2163,7 +2234,7 @@ app.get('/api/recordings', (req: Request, res: Response) => {
 
 app.get('/api/recordings/:id', (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const rec = recordings.get(id);
+  const rec = getRecordingById(id);
   if (!rec) {
     return res.status(404).json({ error: 'Recording not found.' });
   }
@@ -2176,17 +2247,25 @@ app.get('/api/recordings/:id', (req: Request, res: Response) => {
     return res.status(403).json({ error: 'This lecture is not published yet.' });
   }
 
-  // Track student access count
+  // Track student access count & activity log
   if (!isFaculty && user?.email) {
-    let set = accessedStudentsPerLecture.get(id);
-    if (!set) {
-      set = new Set<string>();
-      accessedStudentsPerLecture.set(id, set);
+    const isFirstAccess = recordStudentAccess(id, user.email);
+    if (isFirstAccess) {
+      rec.studentsAccessed = (rec.studentsAccessed || 0) + 1;
     }
-    if (!set.has(user.email)) {
-      set.add(user.email);
-      rec.studentsAccessed = (rec.studentsAccessed || 28) + 1;
-    }
+    rec.studentsAccessed = getAccessedStudentsForLecture(id).size;
+
+    logLectureAccess({
+      id: 'log-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+      studentEmail: user.email,
+      studentName: user.name || user.email.split('@')[0],
+      recordingId: id,
+      lectureTitle: rec.title,
+      subject: rec.subject || rec.classCourse || undefined,
+      action: 'VIEW',
+      timestamp: new Date(),
+    });
+    updateRecording(rec);
   }
 
   const userTz = getRequestTimeZone(req);
@@ -2195,28 +2274,75 @@ app.get('/api/recordings/:id', (req: Request, res: Response) => {
 
 app.get('/api/recordings/:id/audio', (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const rec = recordings.get(id);
+  const rec = getRecordingById(id);
   if (!rec) {
     return res.status(404).end();
   }
-  if (!rec.audioData || rec.audioData.length === 0) {
+
+  const resolvedPath = resolveAudioPath(rec.audioFilePath);
+  if (!resolvedPath || !fs.existsSync(resolvedPath)) {
+    return res.status(404).json({ error: 'Audio file not found on disk.' });
+  }
+
+  const stat = fs.statSync(resolvedPath);
+  const fileSize = stat.size;
+  if (fileSize === 0) {
     return res.status(204).end();
   }
 
+  const user = getAuthenticatedUser(req);
+  const isFaculty = user?.role === 'faculty';
+
   // Increment play count when audio is streamed
   if (!req.headers.range || req.headers.range.startsWith('bytes=0-')) {
-    rec.playsCount = (rec.playsCount || 60) + 1;
+    rec.playsCount = (rec.playsCount || 0) + 1;
+
+    if (!isFaculty && user?.email) {
+      recordStudentAccess(id, user.email);
+      rec.studentsAccessed = getAccessedStudentsForLecture(id).size;
+
+      logLectureAccess({
+        id: 'log-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+        studentEmail: user.email,
+        studentName: user.name || user.email.split('@')[0],
+        recordingId: id,
+        lectureTitle: rec.title,
+        subject: rec.subject || rec.classCourse || undefined,
+        action: 'STREAM',
+        timestamp: new Date(),
+      });
+    }
+    updateRecording(rec);
   }
 
   const contentType = rec.audioContentType && rec.audioContentType.trim() ? rec.audioContentType : 'audio/webm';
   const filename = rec.audioFilename || `recording-${id}.webm`;
   const disposition = req.query.download === '1' ? 'attachment' : 'inline';
 
-  res.setHeader('Content-Type', contentType);
-  res.setHeader('Content-Length', rec.audioData.length);
-  res.setHeader('Accept-Ranges', 'bytes');
-  res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
-  return res.status(200).send(rec.audioData);
+  const range = req.headers.range;
+  if (range) {
+    const parts = range.replace(/bytes=/, '').split('-');
+    const start = parseInt(parts[0], 10);
+    const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+    const chunkSize = end - start + 1;
+    const fileStream = fs.createReadStream(resolvedPath, { start, end });
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': chunkSize,
+      'Content-Type': contentType,
+      'Content-Disposition': `${disposition}; filename="${filename}"`,
+    });
+    fileStream.pipe(res);
+  } else {
+    res.writeHead(200, {
+      'Content-Length': fileSize,
+      'Content-Type': contentType,
+      'Accept-Ranges': 'bytes',
+      'Content-Disposition': `${disposition}; filename="${filename}"`,
+    });
+    fs.createReadStream(resolvedPath).pipe(res);
+  }
 });
 
 app.post('/api/recordings', upload.single('file'), async (req: Request, res: Response) => {
@@ -2260,23 +2386,24 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
       });
     }
 
-    const audioBytes = file.buffer;
+    // Save audio file into audio/ folder and store relative path in SQLite
+    const savedAudio = saveAudioFile(file.buffer, originalFilename);
     const audioContentType = audioValidation.normalizedMime;
 
     let storageBoxId: number | null = null;
     if (req.body.storageBoxId !== undefined && req.body.storageBoxId !== null && req.body.storageBoxId !== '') {
       const parsedBoxId = Number(req.body.storageBoxId);
-      if (!Number.isNaN(parsedBoxId) && storageBoxes.has(parsedBoxId)) {
-        storageBoxId = parsedBoxId;
-        const targetBox = storageBoxes.get(parsedBoxId);
+      if (!Number.isNaN(parsedBoxId)) {
+        const targetBox = getStorageBoxById(parsedBoxId);
         if (targetBox) {
+          storageBoxId = parsedBoxId;
           targetBox.updatedAt = new Date();
-          storageBoxes.set(parsedBoxId, targetBox);
+          updateStorageBox(targetBox);
         }
       }
     }
 
-    const resolvedSubject = subject || (storageBoxId ? storageBoxes.get(storageBoxId)?.name : null) || lectureName || 'General Studies';
+    const resolvedSubject = subject || (storageBoxId ? getStorageBoxById(storageBoxId)?.name : null) || lectureName || 'General Studies';
 
     const initialFacultyStatus: 'DRAFT' | 'PROCESSING' | 'READY' | 'PUBLISHED' =
       req.body.facultyStatus === 'PUBLISHED'
@@ -2290,21 +2417,15 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
 
     try {
       finalTranscript = await transcribeAudioBuffer(
-        audioBytes,
+        file.buffer,
         originalFilename,
         audioContentType,
         liveSpeechTranscript || null
       );
       finalSummary = await generateAiSummary(finalTranscript, summaryMode);
     } catch (procErr: any) {
-      if (initialFacultyStatus === 'DRAFT') {
-        finalTranscript = '';
-        finalSummary = '';
-      } else {
-        return res.status(422).json({
-          error: procErr?.message || 'Speech-to-text transcription or summarization failed for this recording.',
-        });
-      }
+      finalTranscript = `[Audio recording saved. Transcription pending: ${procErr?.message || 'Speech-to-text processing failed'}. Configure Gemini API Key in Settings and click "Regenerate AI" in Review.]`;
+      finalSummary = '[AI Summary pending: Configure Gemini API Key in Settings.]';
     }
 
     let allowedAccess: string[] = ['SE Computer Engineering', 'Data Structures', 'AI & Machine Learning'];
@@ -2317,12 +2438,19 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
       allowedAccess = Array.from(new Set([classCourse, resolvedSubject].filter(Boolean) as string[]));
     }
 
+    let allowedStudents: string[] = [];
+    if (req.body.allowedStudents) {
+      try {
+        const parsed = typeof req.body.allowedStudents === 'string' ? JSON.parse(req.body.allowedStudents) : req.body.allowedStudents;
+        if (Array.isArray(parsed)) allowedStudents = parsed.map((s: any) => String(s).trim().toLowerCase()).filter(Boolean);
+      } catch {}
+    }
+
     const isPublished = initialFacultyStatus === 'PUBLISHED';
 
-    const newRec: Recording = {
-      id: recordingIdCounter++,
-      title,
+    const newRec = createRecording({
       storageBoxId,
+      title,
       lectureName: resolvedSubject,
       professorName,
       subject: resolvedSubject,
@@ -2336,6 +2464,7 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
       published: isPublished,
       isFacultyLecture: true,
       allowedAccess,
+      allowedStudents,
       studentsAccessed: isPublished ? 12 : 0,
       playsCount: isPublished ? 18 : 1,
       avgListeningTime: isPublished ? '22m 15s' : '00m 00s',
@@ -2343,10 +2472,9 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
       summary: finalSummary,
       audioFilename: originalFilename,
       audioContentType,
-      audioData: audioBytes,
-    };
+      audioFilePath: savedAudio.relativePath,
+    });
 
-    recordings.set(newRec.id, newRec);
     const userTz = getRequestTimeZone(req);
     return res.status(201).json(toRecordingDto(newRec, userTz));
   } catch (err: any) {
@@ -2358,33 +2486,39 @@ app.post('/api/recordings', upload.single('file'), async (req: Request, res: Res
 // ── Storage Box REST Endpoints (/api/boxes) ──────────────────────────────────
 
 app.get('/api/boxes', (req: Request, res: Response) => {
+  const user = getAuthenticatedUser(req);
   const userTz = getRequestTimeZone(req);
-  const boxes = Array.from(storageBoxes.values())
+  const boxes = getAllStorageBoxes()
+    .filter(b => canUserAccessBox(user, b))
     .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())
-    .map(b => toStorageBoxDto(b, userTz));
+    .map(b => toStorageBoxDto(b, userTz, user));
   return res.status(200).json(boxes);
 });
 
 app.get('/api/boxes/:id', (req: Request, res: Response) => {
   const id = Number(req.params.id);
-  const box = storageBoxes.get(id);
+  const box = getStorageBoxById(id);
   if (!box) {
     return res.status(404).json({ error: 'Storage box not found.' });
   }
 
   const user = getAuthenticatedUser(req);
+  if (!canUserAccessBox(user, box)) {
+    return res.status(403).json({ error: 'Access denied. You do not have permission to view this storage box.' });
+  }
+
   const roleHeader = (req.headers['x-user-role'] as string || '').toLowerCase();
   const isFaculty = user?.role === 'faculty' || roleHeader === 'faculty';
   const userTz = getRequestTimeZone(req);
 
-  const boxRecordings = Array.from(recordings.values())
+  const boxRecordings = getAllRecordings()
     .filter(r => r.storageBoxId === id)
-    .filter(r => isFaculty || r.published === true || r.facultyStatus === 'PUBLISHED')
+    .filter(r => isFaculty || (canUserAccessRecording(user, r) && (r.published === true || r.facultyStatus === 'PUBLISHED')))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .map(r => toRecordingDto(r, userTz));
 
   return res.status(200).json({
-    box: toStorageBoxDto(box, userTz),
+    box: toStorageBoxDto(box, userTz, user),
     recordings: boxRecordings,
   });
 });
@@ -2393,7 +2527,7 @@ app.post('/api/boxes', (req: Request, res: Response) => {
   const facultyUser = requireFaculty(req, res);
   if (!facultyUser) return;
 
-  const { name, description } = req.body || {};
+  const { name, description, allowedStudents } = req.body || {};
   if (!name || typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ error: 'Storage box name is required.' });
   }
@@ -2401,19 +2535,23 @@ app.post('/api/boxes', (req: Request, res: Response) => {
   const creatorName = facultyUser.name || 'Faculty Member';
   const facultyId = facultyUser.facultyId;
 
-  const newBox: StorageBox = {
-    id: storageBoxIdCounter++,
+  let assignedStudents: string[] = [];
+  if (Array.isArray(allowedStudents)) {
+    assignedStudents = allowedStudents.map((s: any) => String(s).trim().toLowerCase()).filter(Boolean);
+  }
+
+  const newBox = createStorageBox({
     name: name.trim(),
     description: typeof description === 'string' ? description.trim() : '',
     createdBy: creatorName,
     facultyId,
+    allowedStudents: assignedStudents,
     createdAt: new Date(),
     updatedAt: new Date(),
-  };
+  });
 
-  storageBoxes.set(newBox.id, newBox);
   const userTz = getRequestTimeZone(req);
-  return res.status(201).json(toStorageBoxDto(newBox, userTz));
+  return res.status(201).json(toStorageBoxDto(newBox, userTz, facultyUser));
 });
 
 app.put('/api/boxes/:id', (req: Request, res: Response) => {
@@ -2421,23 +2559,26 @@ app.put('/api/boxes/:id', (req: Request, res: Response) => {
   if (!facultyUser) return;
 
   const id = Number(req.params.id);
-  const box = storageBoxes.get(id);
+  const box = getStorageBoxById(id);
   if (!box) {
     return res.status(404).json({ error: 'Storage box not found.' });
   }
 
-  const { name, description } = req.body || {};
+  const { name, description, allowedStudents } = req.body || {};
   if (typeof name === 'string' && name.trim()) {
     box.name = name.trim();
   }
   if (typeof description === 'string') {
     box.description = description.trim();
   }
+  if (Array.isArray(allowedStudents)) {
+    box.allowedStudents = allowedStudents.map((s: any) => String(s).trim().toLowerCase()).filter(Boolean);
+  }
   box.updatedAt = new Date();
-  storageBoxes.set(id, box);
+  updateStorageBox(box);
 
   const userTz = getRequestTimeZone(req);
-  return res.status(200).json(toStorageBoxDto(box, userTz));
+  return res.status(200).json(toStorageBoxDto(box, userTz, facultyUser));
 });
 
 app.delete('/api/boxes/:id', (req: Request, res: Response) => {
@@ -2445,19 +2586,11 @@ app.delete('/api/boxes/:id', (req: Request, res: Response) => {
   if (!facultyUser) return;
 
   const id = Number(req.params.id);
-  if (!storageBoxes.has(id)) {
+  if (!getStorageBoxById(id)) {
     return res.status(404).json({ error: 'Storage box not found.' });
   }
 
-  // Unlink recordings from this box rather than hard deleting the recordings
-  for (const rec of recordings.values()) {
-    if (rec.storageBoxId === id) {
-      rec.storageBoxId = null;
-      recordings.set(rec.id, rec);
-    }
-  }
-
-  storageBoxes.delete(id);
+  deleteStorageBox(id);
   return res.status(204).end();
 });
 
@@ -2468,7 +2601,7 @@ app.put('/api/recordings/:id', (req: Request, res: Response) => {
   if (!facultyUser) return;
 
   const id = Number(req.params.id);
-  const rec = recordings.get(id);
+  const rec = getRecordingById(id);
   if (!rec) {
     return res.status(404).json({ error: 'Lecture not found.' });
   }
@@ -2492,12 +2625,12 @@ app.put('/api/recordings/:id', (req: Request, res: Response) => {
   if (typeof title === 'string' && title.trim()) rec.title = title.trim();
   if (storageBoxId !== undefined) {
     const parsedBoxId = storageBoxId ? Number(storageBoxId) : null;
-    rec.storageBoxId = parsedBoxId && !Number.isNaN(parsedBoxId) && storageBoxes.has(parsedBoxId) ? parsedBoxId : null;
+    rec.storageBoxId = parsedBoxId && !Number.isNaN(parsedBoxId) && getStorageBoxById(parsedBoxId) ? parsedBoxId : null;
     if (rec.storageBoxId) {
-      const box = storageBoxes.get(rec.storageBoxId);
+      const box = getStorageBoxById(rec.storageBoxId);
       if (box) {
         box.updatedAt = new Date();
-        storageBoxes.set(rec.storageBoxId, box);
+        updateStorageBox(box);
       }
     }
   }
@@ -2516,6 +2649,9 @@ app.put('/api/recordings/:id', (req: Request, res: Response) => {
   if (Array.isArray(allowedAccess)) {
     rec.allowedAccess = allowedAccess;
   }
+  if (Array.isArray(req.body?.allowedStudents)) {
+    rec.allowedStudents = req.body.allowedStudents.map((s: any) => String(s).trim().toLowerCase()).filter(Boolean);
+  }
 
   if (typeof published === 'boolean') {
     rec.published = published;
@@ -2525,7 +2661,7 @@ app.put('/api/recordings/:id', (req: Request, res: Response) => {
     rec.published = facultyStatus === 'PUBLISHED';
   }
 
-  recordings.set(id, rec);
+  updateRecording(rec);
   const userTz = getRequestTimeZone(req);
   return res.status(200).json(toRecordingDto(rec, userTz));
 });
@@ -2535,7 +2671,7 @@ app.post('/api/recordings/:id/regenerate', async (req: Request, res: Response) =
   if (!facultyUser) return;
 
   const id = Number(req.params.id);
-  const rec = recordings.get(id);
+  const rec = getRecordingById(id);
   if (!rec) {
     return res.status(404).json({ error: 'Lecture not found.' });
   }
@@ -2545,8 +2681,9 @@ app.post('/api/recordings/:id/regenerate', async (req: Request, res: Response) =
 
   try {
     if (target === 'transcript' || target === 'both') {
+      const audioBuffer = getAudioBuffer(rec.audioFilePath);
       rec.transcript = await transcribeAudioBuffer(
-        rec.audioData,
+        audioBuffer,
         rec.audioFilename || 'lecture.webm',
         rec.audioContentType || 'audio/webm',
         null
@@ -2557,7 +2694,7 @@ app.post('/api/recordings/:id/regenerate', async (req: Request, res: Response) =
       rec.summary = await generateAiSummary(rec.transcript, mode);
     }
 
-    recordings.set(id, rec);
+    updateRecording(rec);
     const userTz = getRequestTimeZone(req);
     return res.status(200).json(toRecordingDto(rec, userTz));
   } catch (err: any) {
@@ -2572,7 +2709,7 @@ app.post('/api/recordings/:id/publish', (req: Request, res: Response) => {
   if (!facultyUser) return;
 
   const id = Number(req.params.id);
-  const rec = recordings.get(id);
+  const rec = getRecordingById(id);
   if (!rec) {
     return res.status(404).json({ error: 'Lecture not found.' });
   }
@@ -2595,7 +2732,7 @@ app.post('/api/recordings/:id/publish', (req: Request, res: Response) => {
     }
   }
 
-  recordings.set(id, rec);
+  updateRecording(rec);
   const userTz = getRequestTimeZone(req);
   return res.status(200).json(toRecordingDto(rec, userTz));
 });
@@ -2605,14 +2742,17 @@ app.post('/api/recordings/:id/access', (req: Request, res: Response) => {
   if (!facultyUser) return;
 
   const id = Number(req.params.id);
-  const rec = recordings.get(id);
+  const rec = getRecordingById(id);
   if (!rec) {
     return res.status(404).json({ error: 'Lecture not found.' });
   }
 
-  const { allowedAccess, classCourse, subject } = req.body || {};
+  const { allowedAccess, allowedStudents, classCourse, subject } = req.body || {};
   if (Array.isArray(allowedAccess)) {
     rec.allowedAccess = allowedAccess;
+  }
+  if (Array.isArray(allowedStudents)) {
+    rec.allowedStudents = allowedStudents.map((s: any) => String(s).trim().toLowerCase()).filter(Boolean);
   }
   if (typeof classCourse === 'string' && classCourse.trim()) {
     rec.classCourse = classCourse.trim();
@@ -2621,9 +2761,125 @@ app.post('/api/recordings/:id/access', (req: Request, res: Response) => {
     rec.subject = subject.trim();
   }
 
-  recordings.set(id, rec);
+  updateRecording(rec);
   const userTz = getRequestTimeZone(req);
   return res.status(200).json(toRecordingDto(rec, userTz));
+});
+
+// ── Faculty Student Management & Analytics Endpoints ─────────────────────────
+
+app.get('/api/faculty/students', (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
+
+  const studentList = getStudents()
+    .map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      course: u.course || 'SE Computer Engineering',
+      department: u.department || 'Computer Engineering & AI',
+      avatarUrl: u.avatarUrl || '',
+      verified: u.verified,
+      createdAt: u.createdAt,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return res.status(200).json(studentList);
+});
+
+app.get('/api/faculty/analytics', (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
+
+  const registeredStudents = getStudents().filter(u => u.verified);
+  const totalRegisteredStudents = registeredStudents.length;
+
+  const facultyRecs = getAllRecordings().filter(r => r.isFacultyLecture);
+  const publishedRecs = facultyRecs.filter(r => isRecordingPublished(r));
+  const accessedStudentsMap = getAllAccessedStudentsPerLecture();
+
+  // Determine distinct students registered / granted access to this faculty's lectures
+  const enrolledStudentEmails = new Set<string>();
+  facultyRecs.forEach(r => {
+    if (Array.isArray(r.allowedStudents) && r.allowedStudents.length > 0 && !r.allowedStudents.includes('ALL')) {
+      r.allowedStudents.forEach(e => enrolledStudentEmails.add(e.toLowerCase()));
+    } else {
+      registeredStudents.forEach(s => enrolledStudentEmails.add(s.email.toLowerCase()));
+    }
+  });
+
+  // Also include any students who accessed the lectures
+  facultyRecs.forEach(r => {
+    const set = accessedStudentsMap.get(r.id);
+    if (set) {
+      set.forEach(e => enrolledStudentEmails.add(e.toLowerCase()));
+    }
+  });
+
+  const totalStudentsOnFacultyLectures = enrolledStudentEmails.size;
+  const totalPlays = facultyRecs.reduce((sum, r) => sum + (r.playsCount || 0), 0);
+
+  // Format recent activity with human-readable "time ago"
+  const now = Date.now();
+  const recentLogs = getLectureAccessLogs(25);
+  const recentActivity = recentLogs.map(log => {
+    const diffSec = Math.max(0, Math.floor((now - new Date(log.timestamp).getTime()) / 1000));
+    let timeAgo = 'Just now';
+    if (diffSec >= 86400) {
+      const days = Math.floor(diffSec / 86400);
+      timeAgo = `${days} day${days > 1 ? 's' : ''} ago`;
+    } else if (diffSec >= 3600) {
+      const hours = Math.floor(diffSec / 3600);
+      timeAgo = `${hours} hour${hours > 1 ? 's' : ''} ago`;
+    } else if (diffSec >= 60) {
+      const mins = Math.floor(diffSec / 60);
+      timeAgo = `${mins} min${mins > 1 ? 's' : ''} ago`;
+    } else if (diffSec > 10) {
+      timeAgo = `${diffSec} seconds ago`;
+    }
+
+    return {
+      id: log.id,
+      studentEmail: log.studentEmail,
+      studentName: log.studentName,
+      recordingId: log.recordingId,
+      lectureTitle: log.lectureTitle,
+      subject: log.subject || 'General Studies',
+      action: log.action,
+      timestamp: new Date(log.timestamp).toISOString(),
+      timeAgo,
+    };
+  });
+
+  const userTz = getRequestTimeZone(req);
+  const lectureStats = facultyRecs.map(r => {
+    const accessedSet = accessedStudentsMap.get(r.id);
+    return {
+      id: r.id,
+      title: r.title,
+      subject: r.subject || r.classCourse || 'General Studies',
+      classCourse: r.classCourse || 'SE Computer Engineering',
+      status: r.facultyStatus || 'READY',
+      published: isRecordingPublished(r),
+      allowedStudentsCount: Array.isArray(r.allowedStudents) && r.allowedStudents.length > 0 && !r.allowedStudents.includes('ALL')
+        ? r.allowedStudents.length
+        : totalRegisteredStudents,
+      studentsAccessed: accessedSet ? accessedSet.size : (r.studentsAccessed || 0),
+      playsCount: r.playsCount || 0,
+      avgListeningTime: r.avgListeningTime || '28m 15s',
+    };
+  });
+
+  return res.status(200).json({
+    totalRegisteredStudents,
+    totalStudentsOnFacultyLectures,
+    totalPlays,
+    totalLectures: facultyRecs.length,
+    publishedLectures: publishedRecs.length,
+    recentActivity,
+    lectureStats,
+  });
 });
 
 app.post('/api/recordings/:id/replace-audio', upload.single('file'), async (req: Request, res: Response) => {
@@ -2631,7 +2887,7 @@ app.post('/api/recordings/:id/replace-audio', upload.single('file'), async (req:
   if (!facultyUser) return;
 
   const id = Number(req.params.id);
-  const rec = recordings.get(id);
+  const rec = getRecordingById(id);
   if (!rec) {
     return res.status(404).json({ error: 'Lecture not found.' });
   }
@@ -2651,7 +2907,12 @@ app.post('/api/recordings/:id/replace-audio', upload.single('file'), async (req:
   const duration = typeof req.body.duration === 'string' && req.body.duration.trim() ? req.body.duration.trim() : rec.duration;
   const regenerateAi = req.body.regenerateAi !== 'false';
 
-  rec.audioData = file.buffer;
+  // Save new audio file to audio/ folder
+  const savedAudio = saveAudioFile(file.buffer, file.originalname || 'replaced_lecture.webm');
+  if (rec.audioFilePath) {
+    deleteAudioFile(rec.audioFilePath);
+  }
+  rec.audioFilePath = savedAudio.relativePath;
   rec.audioFilename = file.originalname || 'replaced_lecture.webm';
   rec.audioContentType = audioValidation.normalizedMime;
   rec.duration = duration;
@@ -2659,20 +2920,19 @@ app.post('/api/recordings/:id/replace-audio', upload.single('file'), async (req:
   if (regenerateAi) {
     try {
       rec.transcript = await transcribeAudioBuffer(
-        rec.audioData,
+        file.buffer,
         rec.audioFilename,
         rec.audioContentType,
         null
       );
       rec.summary = await generateAiSummary(rec.transcript, 'Medium');
     } catch (err: any) {
-      return res.status(422).json({
-        error: err?.message || 'Replaced audio could not be transcribed or summarized.',
-      });
+      rec.transcript = `[Audio recording saved. Transcription pending: ${err?.message || 'AI processing issue'}. Configure Gemini API Key in Settings and click "Regenerate AI".]`;
+      rec.summary = '[AI Summary pending: Configure Gemini API Key in Settings.]';
     }
   }
 
-  recordings.set(id, rec);
+  updateRecording(rec);
   const userTz = getRequestTimeZone(req);
   return res.status(200).json(toRecordingDto(rec, userTz));
 });
@@ -2682,12 +2942,12 @@ app.delete('/api/recordings/:id', (req: Request, res: Response) => {
   if (!facultyUser) return;
 
   const id = Number(req.params.id);
-  const rec = recordings.get(id);
+  const rec = getRecordingById(id);
   if (!rec) {
     return res.status(404).json({ error: 'Recording not found.' });
   }
 
-  recordings.delete(id);
+  deleteRecording(id);
   return res.status(204).end();
 });
 

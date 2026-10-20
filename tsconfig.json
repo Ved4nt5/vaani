@@ -9,5 +9,5 @@
     "noEmit": true,
     "allowJs": true
   },
-  "include": ["server.ts"]
+  "include": ["server.ts", "db.ts"]
 }

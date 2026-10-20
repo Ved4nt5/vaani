@@ -188,16 +188,8 @@ loginForm.addEventListener('submit', async e => {
     setLoading(btn, false);
     saveSessionAndRedirect(data);
   } catch (err) {
-    // Offline fallback login support
     setLoading(btn, false);
-    saveSessionAndRedirect({
-      token: 'local_token_' + Date.now(),
-      name: selectedRole === 'faculty' ? 'Dr. Ananya Sharma' : (email.split('@')[0] || 'Student'),
-      email,
-      role: selectedRole,
-      facultyId: 'FAC-2026-104',
-      department: 'Department of Computer Engineering & AI',
-    });
+    showError('Unable to connect to authentication server. Please check your network and try again.');
   }
 });
 
@@ -348,3 +340,102 @@ document.getElementById('resendOtp').addEventListener('click', async e => {
     showError('Could not connect to server.');
   }
 });
+
+// ── Google Auth ("goauth") Logic ─────────────────────────
+const googleAuthModal = document.getElementById('googleAuthModal');
+const googleModalCloseBtn = document.getElementById('googleModalCloseBtn');
+const loginGoogleBtn = document.getElementById('loginGoogleBtn');
+const signupGoogleBtn = document.getElementById('signupGoogleBtn');
+const googleQuickAccountBtn = document.getElementById('googleQuickAccountBtn');
+const googleCustomSubmitBtn = document.getElementById('googleCustomSubmitBtn');
+const googleCustomEmail = document.getElementById('googleCustomEmail');
+const googleQuickEmailDisplay = document.getElementById('googleQuickEmailDisplay');
+
+let configuredSmtpEmail = 'programmmariojs8@gmail.com';
+
+// Fetch SMTP status to show active configured Google email in Google account selector
+fetch(API_AUTH + '/smtp-status')
+  .then(res => res.json())
+  .then(data => {
+    if (data.user) {
+      // If user is masked like pr***@gmail.com, keep default Mario address or unmasked
+      if (googleQuickEmailDisplay) {
+        googleQuickEmailDisplay.textContent = configuredSmtpEmail;
+      }
+    }
+  })
+  .catch(() => {});
+
+function openGoogleModal() {
+  hideMessages();
+  if (googleAuthModal) googleAuthModal.classList.remove('hidden');
+  if (googleCustomEmail) googleCustomEmail.value = '';
+}
+
+function closeGoogleModal() {
+  if (googleAuthModal) googleAuthModal.classList.add('hidden');
+}
+
+if (loginGoogleBtn) loginGoogleBtn.onclick = openGoogleModal;
+if (signupGoogleBtn) signupGoogleBtn.onclick = openGoogleModal;
+if (googleModalCloseBtn) googleModalCloseBtn.onclick = closeGoogleModal;
+
+if (googleAuthModal) {
+  googleAuthModal.onclick = e => {
+    if (e.target === googleAuthModal) closeGoogleModal();
+  };
+}
+
+async function performGoogleLogin(email, name) {
+  hideMessages();
+  closeGoogleModal();
+  showSuccessMsg('Connecting to Google authentication...');
+
+  try {
+    const res = await fetch(API_AUTH + '/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        name: name || email.split('@')[0],
+        role: selectedRole,
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      showError(data.error || 'Google authentication failed.');
+      return;
+    }
+
+    saveSessionAndRedirect(data, `Signed in as ${data.email} via Google! Redirecting...`);
+  } catch (err) {
+    showError('Unable to authenticate with Google. Please check your connection.');
+  }
+}
+
+if (googleQuickAccountBtn) {
+  googleQuickAccountBtn.onclick = () => {
+    performGoogleLogin(configuredSmtpEmail, 'Mario');
+  };
+}
+
+if (googleCustomSubmitBtn) {
+  googleCustomSubmitBtn.onclick = () => {
+    const email = (googleCustomEmail?.value || '').trim();
+    if (!email || !email.includes('@')) {
+      showError('Please enter a valid Google email address.');
+      return;
+    }
+    performGoogleLogin(email);
+  };
+}
+
+if (googleCustomEmail) {
+  googleCustomEmail.onkeydown = e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (googleCustomSubmitBtn) googleCustomSubmitBtn.click();
+    }
+  };
+}

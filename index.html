@@ -384,6 +384,32 @@
               <span>Innovation Lab</span>
             </label>
           </div>
+
+          <!-- REGISTERED STUDENT EMAIL PERMISSIONS -->
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+              <span style="font-weight:700;font-size:13px;color:var(--text);">🎓 Specific Registered Student Permissions:</span>
+              <span class="badge" id="reviewStudentCountBadge">All Registered Students</span>
+            </div>
+            <div style="display:flex;gap:14px;margin-bottom:10px;font-size:12.5px;">
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="radio" name="reviewStudentScope" id="reviewScopeAll" value="ALL" checked>
+                <span>All Enrolled Students</span>
+              </label>
+              <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="radio" name="reviewStudentScope" id="reviewScopeSpecific" value="SPECIFIC">
+                <span>Choose Specific Students</span>
+              </label>
+            </div>
+            <div id="reviewStudentPickerWrap" class="hidden">
+              <div style="display:flex;gap:6px;margin-bottom:8px;">
+                <input type="text" id="reviewStudentFilterInput" class="meta-input" placeholder="🔍 Search students by name or email..." style="margin-top:0;font-size:12px;padding:6px 10px;">
+                <button type="button" class="outline" id="reviewSelectAllStudentsBtn" style="padding:6px 10px;font-size:11.5px;white-space:nowrap;">Select All</button>
+                <button type="button" class="outline" id="reviewClearStudentsBtn" style="padding:6px 10px;font-size:11.5px;white-space:nowrap;">Clear</button>
+              </div>
+              <div id="reviewStudentChecklist" class="student-checklist-scroll"></div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -432,48 +458,90 @@
 
       <!-- 5. BASIC ANALYTICS (FACULTY) -->
       <section id="facultyAnalytics" class="page">
-        <div class="crumb">Faculty Dashboard &rsaquo; Lecture Analytics</div>
-        <div class="detailhead">
+        <div class="crumb">Faculty Dashboard &rsaquo; Student &amp; Lecture Analytics</div>
+        <div class="detailhead" style="flex-wrap:wrap;gap:12px;">
           <div>
-            <h1>📊 Lecture Analytics</h1>
-            <p class="muted">Overview of student engagement across your published lectures.</p>
+            <h1>📊 Student &amp; Lecture Analytics</h1>
+            <p class="muted">Real-time visibility into registered students, lecture access permissions, and student study activity.</p>
           </div>
-          <button class="outline" data-page="facultyLectures">📚 Manage Lectures</button>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <button class="outline" id="anaRefreshBtn" type="button" style="padding:10px 16px;font-size:13px;"><i data-lucide="refresh-cw" class="icon-primary"></i> Refresh</button>
+            <button class="primary" data-page="facultyLectures" style="padding:10px 16px;font-size:13px;"><i data-lucide="book-open" style="color:white"></i> Manage Lectures</button>
+          </div>
         </div>
 
-        <div class="stats stats-3">
+        <!-- 4 KPI SUMMARY CARDS -->
+        <div class="stats stats-4">
           <div class="stat-card">
-            <span class="stat-icon">👥</span>
-            <b id="anaTotalStudents">0</b>
-            <small>Number of Students Accessed</small>
+            <span class="stat-icon"><i data-lucide="users" class="icon-primary"></i></span>
+            <b id="anaTotalRegistered">0</b>
+            <small>Total Students Registered</small>
+            <span class="stat-tag" style="font-size:11px;font-weight:700;color:var(--success);margin-top:2px;">Verified Platform Accounts</span>
           </div>
           <div class="stat-card">
-            <span class="stat-icon">▶️</span>
+            <span class="stat-icon"><i data-lucide="user-check" class="icon-primary"></i></span>
+            <b id="anaTotalEnrolled">0</b>
+            <small>Students on Your Lectures</small>
+            <span class="stat-tag" style="font-size:11px;font-weight:700;color:var(--p);margin-top:2px;">Granted Access or Active</span>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon"><i data-lucide="play-circle" class="icon-primary"></i></span>
             <b id="anaTotalPlays">0</b>
-            <small>Number of Plays</small>
+            <small>Total Lecture Plays</small>
+            <span class="stat-tag" style="font-size:11px;font-weight:700;color:#2563eb;margin-top:2px;">Cumulative Audio Streams</span>
           </div>
           <div class="stat-card">
-            <span class="stat-icon">⏱</span>
-            <b id="anaAvgTime">32m 15s</b>
-            <small>Average Listening Time</small>
+            <span class="stat-icon"><i data-lucide="book-open" class="icon-primary"></i></span>
+            <b id="anaPublishedCount">0</b>
+            <small>Published Lectures</small>
+            <span class="stat-tag" style="font-size:11px;font-weight:700;color:#059669;margin-top:2px;">Available in Student Portal</span>
           </div>
         </div>
 
-        <div class="card">
-          <div class="cardhead">
-            <h2>Engagement by Lecture</h2>
+        <!-- RECENT STUDENT ACCESS ACTIVITY STREAM -->
+        <div class="card" style="margin-top:24px;">
+          <div class="cardhead" style="flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <h2 style="margin:0;">🕒 Recent Student Lecture Access</h2>
+              <span class="badge" style="background:#e0f2fe;color:#0369a1;font-weight:700;">🟢 Live Activity Feed</span>
+            </div>
+            <input id="anaActivitySearchInput" type="text" class="meta-input" placeholder="🔍 Filter by student name, email, or lecture..." style="max-width:320px;margin-top:0;font-size:12.5px;padding:8px 12px;">
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Student Name &amp; Email</th>
+                  <th>Lecture Accessed</th>
+                  <th>Activity Action</th>
+                  <th>When Accessed</th>
+                  <th>Access Verification</th>
+                </tr>
+              </thead>
+              <tbody id="anaRecentActivityRows">
+                <tr><td colspan="5" style="text-align:center;padding:24px;" class="muted">Loading student access logs...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- LECTURE ENGAGEMENT BREAKDOWN TABLE -->
+        <div class="card" style="margin-top:24px;">
+          <div class="cardhead" style="flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+            <h2 style="margin:0;">📚 Lecture Access &amp; Engagement Breakdown</h2>
+            <span class="muted" style="font-size:12.5px;" id="anaLectureCountLabel">Showing all faculty lectures</span>
           </div>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th>Lecture Title</th>
-                  <th>Subject</th>
-                  <th>Class / Batch</th>
+                  <th>Subject / Box</th>
                   <th>Status</th>
-                  <th>👥 Students Accessed</th>
+                  <th>👥 Student Access Scope</th>
+                  <th>📊 Unique Listeners</th>
                   <th>▶️ Total Plays</th>
-                  <th>⏱ Avg Listening Time</th>
+                  <th>⏱ Avg Time</th>
                 </tr>
               </thead>
               <tbody id="facultyAnalyticsRows"></tbody>
@@ -788,11 +856,11 @@
 
       <!-- SETTINGS -->
       <section id="settings" class="page">
-        <div class="card settings">
+        <div class="card settings" style="max-width:850px;">
           <h1>Settings</h1>
           <label>Display Name<input id="settingsName" value="User"></label>
           <label>Default Summary Length
-            <select>
+            <select id="settingsSummaryMode">
               <option>Medium</option>
               <option>Short</option>
               <option>Detailed</option>
@@ -801,7 +869,68 @@
           <label>System Timezone
             <input id="settingsTimezone" readonly style="background:#f8f9fd;color:#4920c5;font-weight:500;cursor:default;" title="All recording dates and timestamps are automatically synchronized to your local timezone">
           </label>
-          <button class="primary" id="save">Save Changes</button>
+          <button class="primary" id="save">Save Preferences</button>
+        </div>
+
+        <!-- GEMINI AI & SPEECH-TO-TEXT CONFIGURATION -->
+        <div class="card settings" style="max-width:850px; margin-top:22px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+              <span style="font-size:28px; line-height:1;">🤖</span>
+              <div>
+                <h2 style="margin:0; font-size:18px;">Google Gemini AI &amp; Transcription</h2>
+                <small class="muted">Powers verbatim lecture speech-to-text and grounded academic summaries</small>
+              </div>
+            </div>
+            <div id="geminiStatusBadge" style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:20px; font-weight:700; font-size:12.5px; background:#fff4e5; color:#b45309; border:1px solid #fed7aa;">
+              <span>▲</span> Checking Gemini API Key...
+            </div>
+          </div>
+
+          <div style="background:#faf9fe; border:1px solid var(--border); border-radius:12px; padding:18px; margin-top:14px;">
+            <label class="meta-label" style="margin-bottom:6px;">
+              Gemini API Key
+              <span style="font-weight:normal; color:var(--muted); font-size:12px;">(Stored securely on your server)</span>
+            </label>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <input id="geminiApiKeyInput" type="password" class="meta-input" placeholder="AIzaSy... (Paste your Google Gemini API key)" autocomplete="off" style="margin-top:0; font-family:monospace; letter-spacing:0.5px;">
+              <button type="button" class="outline" id="toggleGeminiKeyVisibility" title="Toggle visibility" style="padding:10px 14px; flex-shrink:0;">👁️</button>
+            </div>
+            <div id="geminiKeyMaskedNote" style="font-size:12px; color:var(--muted); margin-top:6px; min-height:18px;"></div>
+
+            <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; align-items:center;">
+              <button type="button" class="primary" id="saveGeminiKeyBtn">💾 Test &amp; Save Gemini Key</button>
+              <button type="button" class="outline" id="testGeminiKeyBtn">⚡ Test Connection</button>
+              <button type="button" class="outline" id="clearGeminiKeyBtn" style="color:#b45309; border-color:#fde68a;">🗑️ Clear Key</button>
+            </div>
+
+            <div style="margin-top:16px; padding-top:14px; border-top:1px solid #ece8f6; font-size:12.5px; line-height:1.6; color:#494559;">
+              💡 <b>Get a free Gemini API key:</b>
+              Visit <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="color:var(--p); font-weight:700; text-decoration:underline;">Google AI Studio</a>, generate an API key, and paste it above. Google Gemini 3.8 Flash is enabled for high-speed verbatim transcription and exam summaries.
+            </div>
+          </div>
+
+          <!-- TRANSCRIPTION ENGINE TIERS -->
+          <div style="margin-top:20px;">
+            <h3 style="font-size:14px; margin:0 0 10px; color:var(--text);">Audio Transcription &amp; Processing Pipeline</h3>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px; font-size:12px;">
+              <div style="padding:12px; background:#fff; border:1px solid var(--border); border-radius:10px;">
+                <b style="color:var(--p); display:block; margin-bottom:4px;">1. Google Gemini (Primary)</b>
+                <span id="diagGeminiStatus" style="color:#b45309;">▲ Key required</span><br>
+                <small class="muted">Deep audio analysis &amp; revision notes</small>
+              </div>
+              <div style="padding:12px; background:#fff; border:1px solid var(--border); border-radius:10px;">
+                <b style="color:#17864a; display:block; margin-bottom:4px;">2. Browser Web Speech</b>
+                <span style="color:#17864a;">● Available during live mic recording</span><br>
+                <small class="muted">Instant real-time speech capture</small>
+              </div>
+              <div style="padding:12px; background:#fff; border:1px solid var(--border); border-radius:10px;">
+                <b style="color:#0369a1; display:block; margin-bottom:4px;">3. Python Whisper Script</b>
+                <span id="diagWhisperStatus" style="color:var(--muted);">● Ready on server</span><br>
+                <small class="muted">Local fallback transcription engine</small>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </main>

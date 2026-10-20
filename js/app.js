@@ -349,6 +349,7 @@ function page(id) {
   }
   if (id === 'settings') {
     loadSmtpStatus();
+    loadGeminiConfig();
   }
 
   document.querySelectorAll('.page').forEach(x => x.classList.toggle('active', x.id === id));
@@ -739,6 +740,174 @@ async function loadSmtpStatus() {
   } catch (e) {
     if (statusEl) statusEl.textContent = 'Could not retrieve SMTP status from server.';
   }
+}
+
+// ── Gemini AI Configuration & Diagnostics ────────────────────
+async function loadGeminiConfig() {
+  const badge = document.getElementById('geminiStatusBadge');
+  const input = document.getElementById('geminiApiKeyInput');
+  const maskedNote = document.getElementById('geminiKeyMaskedNote');
+  const diagGemini = document.getElementById('diagGeminiStatus');
+  const diagWhisper = document.getElementById('diagWhisperStatus');
+
+  if (!badge) return;
+
+  try {
+    const res = await fetch('/api/config/gemini', { headers: authHeaders() });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.configured) {
+        badge.style.background = '#eaf9f0';
+        badge.style.color = '#17864a';
+        badge.style.borderColor = '#bbf7d0';
+        badge.innerHTML = `<span>●</span> Gemini Active (${escapeHtml(data.activeModel || 'gemini-3.8-flash')})`;
+
+        if (input && !input.value) {
+          input.placeholder = `Configured (${data.maskedKey})`;
+        }
+        if (maskedNote) {
+          maskedNote.innerHTML = `Connected with key <code>${escapeHtml(data.maskedKey)}</code> • Model: <b>${escapeHtml(data.activeModel || 'gemini-3.8-flash')}</b>`;
+        }
+        if (diagGemini) {
+          diagGemini.style.color = '#17864a';
+          diagGemini.textContent = `● Active (${data.activeModel || 'gemini-3.8-flash'})`;
+        }
+      } else {
+        badge.style.background = '#fff4e5';
+        badge.style.color = '#b45309';
+        badge.style.borderColor = '#fed7aa';
+        badge.innerHTML = `<span>▲</span> API Key Not Configured`;
+
+        if (input && !input.value) {
+          input.placeholder = 'AIzaSy... (Paste your Google Gemini API key)';
+        }
+        if (maskedNote) {
+          maskedNote.innerHTML = '<span style="color:#b45309;">No Gemini API Key found. Automatic transcription will use fallback until a key is added.</span>';
+        }
+        if (diagGemini) {
+          diagGemini.style.color = '#b45309';
+          diagGemini.textContent = '▲ Key required';
+        }
+      }
+
+      if (diagWhisper) {
+        diagWhisper.textContent = data.hasWhisperPython ? '● Ready (transcribe_whisper.py)' : '○ Standby';
+      }
+    }
+  } catch (err) {
+    if (badge) {
+      badge.innerHTML = '<span style="color:#b45309;">▲ Offline</span>';
+    }
+  }
+}
+
+// Wire Gemini buttons
+const saveGeminiKeyBtn = document.getElementById('saveGeminiKeyBtn');
+if (saveGeminiKeyBtn) {
+  saveGeminiKeyBtn.onclick = async () => {
+    const input = document.getElementById('geminiApiKeyInput');
+    const key = input ? input.value.trim() : '';
+
+    if (!key) {
+      toast('Please enter your Gemini API Key first.');
+      return;
+    }
+
+    const origText = saveGeminiKeyBtn.innerHTML;
+    saveGeminiKeyBtn.disabled = true;
+    saveGeminiKeyBtn.innerHTML = '⏳ Verifying with Gemini API...';
+
+    try {
+      const res = await fetch('/api/config/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ apiKey: key }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast('✅ ' + data.message);
+        if (input) input.value = '';
+        await loadGeminiConfig();
+      } else {
+        toast('❌ ' + (data.error || 'Failed to verify Gemini API Key.'));
+      }
+    } catch (err) {
+      toast('❌ Connection error: ' + (err.message || String(err)));
+    } finally {
+      saveGeminiKeyBtn.disabled = false;
+      saveGeminiKeyBtn.innerHTML = origText;
+    }
+  };
+}
+
+const testGeminiKeyBtn = document.getElementById('testGeminiKeyBtn');
+if (testGeminiKeyBtn) {
+  testGeminiKeyBtn.onclick = async () => {
+    const input = document.getElementById('geminiApiKeyInput');
+    const key = input ? input.value.trim() : '';
+
+    const origText = testGeminiKeyBtn.innerHTML;
+    testGeminiKeyBtn.disabled = true;
+    testGeminiKeyBtn.innerHTML = '⏳ Testing connection...';
+
+    try {
+      const res = await fetch('/api/config/gemini/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ apiKey: key || undefined }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        toast('⚡ ' + data.message);
+      } else {
+        toast('❌ ' + (data.error || 'Connection failed.'));
+      }
+    } catch (err) {
+      toast('❌ Connection error: ' + (err.message || String(err)));
+    } finally {
+      testGeminiKeyBtn.disabled = false;
+      testGeminiKeyBtn.innerHTML = origText;
+    }
+  };
+}
+
+const clearGeminiKeyBtn = document.getElementById('clearGeminiKeyBtn');
+if (clearGeminiKeyBtn) {
+  clearGeminiKeyBtn.onclick = async () => {
+    if (!confirm('Are you sure you want to remove the configured Gemini API key?')) return;
+    try {
+      const res = await fetch('/api/config/gemini', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        body: JSON.stringify({ clear: true }),
+      });
+      if (res.ok) {
+        toast('🗑️ Gemini API key cleared.');
+        const input = document.getElementById('geminiApiKeyInput');
+        if (input) input.value = '';
+        await loadGeminiConfig();
+      }
+    } catch (err) {
+      toast('❌ Failed to clear key.');
+    }
+  };
+}
+
+const toggleGeminiKeyVisibility = document.getElementById('toggleGeminiKeyVisibility');
+if (toggleGeminiKeyVisibility) {
+  toggleGeminiKeyVisibility.onclick = () => {
+    const input = document.getElementById('geminiApiKeyInput');
+    if (!input) return;
+    if (input.type === 'password') {
+      input.type = 'text';
+      toggleGeminiKeyVisibility.textContent = '🔒';
+    } else {
+      input.type = 'password';
+      toggleGeminiKeyVisibility.textContent = '👁️';
+    }
+  };
 }
 
 document.querySelector('#logout').onclick = async () => {
@@ -2583,6 +2752,7 @@ if (boxRecordingsSearchInput) {
 
 // ── Init & Role Landing ───────────────────────────────────
 fetchStorageBoxes();
+loadGeminiConfig();
 if (isFacultyRole()) {
   page('facultyDashboard');
 } else {
