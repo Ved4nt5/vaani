@@ -17,10 +17,29 @@ if (!fs.existsSync(AUDIO_DIR)) {
 }
 
 // ── Initialize SQLite Database ───────────────────────────────────────────────
-export const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-db.pragma('synchronous = NORMAL');
+let dbInstance: Database.Database;
+try {
+  dbInstance = new Database(DB_PATH);
+  dbInstance.pragma('journal_mode = WAL');
+  dbInstance.pragma('foreign_keys = ON');
+  dbInstance.pragma('synchronous = NORMAL');
+  dbInstance.prepare('SELECT 1').get();
+} catch (err: any) {
+  console.warn('[SQLite] Database corruption or error detected, recreating database:', err?.message);
+  try {
+    if (fs.existsSync(DB_PATH)) fs.unlinkSync(DB_PATH);
+    if (fs.existsSync(DB_PATH + '-wal')) fs.unlinkSync(DB_PATH + '-wal');
+    if (fs.existsSync(DB_PATH + '-shm')) fs.unlinkSync(DB_PATH + '-shm');
+  } catch (e) {
+    console.error('Failed to clean up malformed DB files:', e);
+  }
+  dbInstance = new Database(DB_PATH);
+  dbInstance.pragma('journal_mode = WAL');
+  dbInstance.pragma('foreign_keys = ON');
+  dbInstance.pragma('synchronous = NORMAL');
+}
+
+export const db = dbInstance;
 
 // ── Models & Interfaces ──────────────────────────────────────────────────────
 
@@ -200,9 +219,91 @@ export function initializeDatabase() {
       updated_at TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS faculty_analytics_goals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      faculty_email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      weekly_target INTEGER NOT NULL DEFAULT 3,
+      monthly_target INTEGER NOT NULL DEFAULT 6,
+      updated_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_recordings_box ON recordings(storage_box_id);
     CREATE INDEX IF NOT EXISTS idx_access_logs_recording ON lecture_access_logs(recording_id);
   `);
+}
+
+// Ensure schema is prepared immediately
+initializeDatabase();
+
+export interface FacultyAnalyticsGoals {
+  weeklyTarget: number;
+  monthlyTarget: number;
+  updatedAt: string;
+}
+
+export function getFacultyAnalyticsGoals(facultyEmail: string = 'faculty@vaani.edu'): FacultyAnalyticsGoals {
+  try {
+    const row = db.prepare('SELECT weekly_target, monthly_target, updated_at FROM faculty_analytics_goals WHERE faculty_email = ? COLLATE NOCASE').get(facultyEmail) as any;
+    if (row) {
+      return {
+        weeklyTarget: Number(row.weekly_target) || 3,
+        monthlyTarget: Number(row.monthly_target) || 6,
+        updatedAt: row.updated_at,
+      };
+    }
+    const wk = getSystemSetting('analytics_weekly_goal');
+    const mo = getSystemSetting('analytics_monthly_goal');
+    return {
+      weeklyTarget: wk ? Number(wk) : 3,
+      monthlyTarget: mo ? Number(mo) : 6,
+      updatedAt: new Date().toISOString(),
+    };
+  } catch {
+    return { weeklyTarget: 3, monthlyTarget: 6, updatedAt: new Date().toISOString() };
+  }
+}
+
+export function saveFacultyAnalyticsGoals(
+  facultyEmail: string = 'faculty@vaani.edu',
+  weeklyTarget: number,
+  monthlyTarget: number
+): FacultyAnalyticsGoals {
+  const now = new Date().toISOString();
+  const safeWeekly = Math.max(1, Math.min(50, Math.round(Number(weeklyTarget) || 3)));
+  const safeMonthly = Math.max(1, Math.min(200, Math.round(Number(monthlyTarget) || 6)));
+
+  try {
+    db.prepare(`
+      INSERT INTO faculty_analytics_goals (faculty_email, weekly_target, monthly_target, updated_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(faculty_email) DO UPDATE SET
+        weekly_target = excluded.weekly_target,
+        monthly_target = excluded.monthly_target,
+        updated_at = excluded.updated_at
+    `).run(facultyEmail, safeWeekly, safeMonthly, now);
+
+    setSystemSetting('analytics_weekly_goal', String(safeWeekly));
+    setSystemSetting('analytics_monthly_goal', String(safeMonthly));
+  } catch (e) {
+    console.error('[DB] saveFacultyAnalyticsGoals error:', e);
+  }
+
+  return {
+    weeklyTarget: safeWeekly,
+    monthlyTarget: safeMonthly,
+    updatedAt: now,
+  };
+}
+
+export function updateRecordingLectureDate(id: number, lectureDate: string): boolean {
+  try {
+    const trimmed = (lectureDate || '').trim();
+    if (!trimmed) return false;
+    db.prepare('UPDATE recordings SET lecture_date = ? WHERE id = ?').run(trimmed, id);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function getSystemSetting(key: string): string | null {

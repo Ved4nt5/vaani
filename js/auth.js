@@ -52,7 +52,7 @@ function setRole(role) {
   const loginEmailInput = document.getElementById('loginEmail');
   const loginBtn        = document.getElementById('loginBtn');
 
-  if (loginHeading)    loginHeading.textContent    = isFaculty ? '👨‍🏫 Faculty Login' : '🎓 Student Login';
+  if (loginHeading)    loginHeading.textContent    = isFaculty ? 'Faculty Login' : 'Student Login';
   if (loginSubtitle)   loginSubtitle.textContent   = isFaculty
     ? 'Sign in to upload, review, and publish lectures'
     : 'Enter your student credentials to continue';
@@ -247,8 +247,8 @@ signupForm.addEventListener('submit', async e => {
     if (badge) {
       badge.style.display = 'block';
       badge.innerHTML = data.demoCode
-        ? `✉️ Verification code for <b>${escapeHtml(signupEmail)}</b>: <b>${escapeHtml(data.demoCode)}</b> (auto-filled below).`
-        : `✉️ Verification email sent to <b>${escapeHtml(signupEmail)}</b>. Please check your inbox and enter the 6-digit code below.`;
+        ? `Verification code for <b>${escapeHtml(signupEmail)}</b>: <b>${escapeHtml(data.demoCode)}</b> (auto-filled below).`
+        : `Verification email sent to <b>${escapeHtml(signupEmail)}</b>. Please check your inbox and enter the 6-digit code below.`;
     }
     showSuccessMsg('Verification code sent to ' + signupEmail + '!');
   } catch (err) {

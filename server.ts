@@ -53,14 +53,16 @@ import {
   getAllAccessedStudentsPerLecture,
   logLectureAccess,
   getLectureAccessLogs,
+  getFacultyAnalyticsGoals,
+  saveFacultyAnalyticsGoals,
+  updateRecordingLectureDate,
   seedDatabaseIfEmpty,
 } from './db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
 const app = express();
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = 3000;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -2852,16 +2854,100 @@ app.get('/api/faculty/analytics', (req: Request, res: Response) => {
     };
   });
 
-  const userTz = getRequestTimeZone(req);
+  const userTz = getRequestTimeZone(req) || 'UTC';
+  let nowInTz = '';
+  try {
+    nowInTz = new Intl.DateTimeFormat('en-CA', {
+      timeZone: userTz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  } catch (e) {
+    nowInTz = new Date().toISOString().slice(0, 10);
+  }
+
+  // Consistent week (Monday-Sunday) and month boundaries
+  const [currY, currM, currD] = nowInTz.split('-').map(Number);
+  const todayUtc = new Date(Date.UTC(currY, currM - 1, currD, 12, 0, 0));
+  const dayOfWeek = todayUtc.getUTCDay(); // 0 is Sun, 1 is Mon
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const mondayUtc = new Date(todayUtc.getTime() + diffToMonday * 86400000);
+  const sundayUtc = new Date(mondayUtc.getTime() + 6 * 86400000);
+  const weekStartStr = mondayUtc.toISOString().slice(0, 10);
+  const weekEndStr = sundayUtc.toISOString().slice(0, 10);
+
+  const monthStartStr = `${currY}-${String(currM).padStart(2, '0')}-01`;
+  const lastDayOfMonth = new Date(Date.UTC(currY, currM, 0)).getUTCDate();
+  const monthEndStr = `${currY}-${String(currM).padStart(2, '0')}-${String(lastDayOfMonth).padStart(2, '0')}`;
+
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const weeklyDays = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(mondayUtc.getTime() + i * 86400000);
+    const dateStr = d.toISOString().slice(0, 10);
+    const dayRecs = publishedRecs.filter(r => {
+      const pDate = r.lectureDate || (r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : '');
+      return pDate === dateStr;
+    });
+    weeklyDays.push({
+      date: dateStr,
+      dayName: dayNames[i],
+      dayNumber: d.getUTCDate(),
+      count: dayRecs.length,
+      isToday: dateStr === nowInTz,
+      lectures: dayRecs.map(r => ({
+        id: r.id,
+        title: r.title,
+        subject: r.subject || r.classCourse || 'General',
+        duration: r.duration || '00:00',
+      })),
+    });
+  }
+
+  const publishedThisWeek = publishedRecs.filter(r => {
+    const pDate = r.lectureDate || (r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : '');
+    return pDate >= weekStartStr && pDate <= weekEndStr;
+  }).length;
+
+  const publishedThisMonth = publishedRecs.filter(r => {
+    const pDate = r.lectureDate || (r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : '');
+    return pDate >= monthStartStr && pDate <= monthEndStr;
+  }).length;
+
+  // Map of all published lecture dates for calendar markers
+  const publishedDatesMap: Record<string, Array<{ id: number; title: string; subject: string; duration: string; playsCount: number; studentsAccessed: number }>> = {};
+  publishedRecs.forEach(r => {
+    const pDate = r.lectureDate || (r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : nowInTz);
+    if (!publishedDatesMap[pDate]) {
+      publishedDatesMap[pDate] = [];
+    }
+    const accessedSet = accessedStudentsMap.get(r.id);
+    publishedDatesMap[pDate].push({
+      id: r.id,
+      title: r.title,
+      subject: r.subject || r.classCourse || 'General',
+      duration: r.duration || '00:00',
+      playsCount: r.playsCount || 0,
+      studentsAccessed: accessedSet ? accessedSet.size : (r.studentsAccessed || 0),
+    });
+  });
+
   const lectureStats = facultyRecs.map(r => {
     const accessedSet = accessedStudentsMap.get(r.id);
+    const box = r.storageBoxId ? getStorageBoxById(r.storageBoxId) : null;
     return {
       id: r.id,
       title: r.title,
-      subject: r.subject || r.classCourse || 'General Studies',
+      subject: r.subject || (box ? box.name : null) || r.classCourse || 'General Studies',
+      storageBoxName: box ? box.name : null,
       classCourse: r.classCourse || 'SE Computer Engineering',
       status: r.facultyStatus || 'READY',
       published: isRecordingPublished(r),
+      lectureDate: r.lectureDate || (r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : nowInTz),
+      createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+      createdAtIso: r.createdAt ? new Date(r.createdAt).toISOString() : null,
+      duration: r.duration || '00:00',
       allowedStudentsCount: Array.isArray(r.allowedStudents) && r.allowedStudents.length > 0 && !r.allowedStudents.includes('ALL')
         ? r.allowedStudents.length
         : totalRegisteredStudents,
@@ -2871,14 +2957,89 @@ app.get('/api/faculty/analytics', (req: Request, res: Response) => {
     };
   });
 
+  const facultyEmail = facultyUser.email || 'faculty@vaani.edu';
+  const goals = getFacultyAnalyticsGoals(facultyEmail);
+
   return res.status(200).json({
     totalRegisteredStudents,
     totalStudentsOnFacultyLectures,
     totalPlays,
     totalLectures: facultyRecs.length,
     publishedLectures: publishedRecs.length,
+    publishedThisWeek,
+    publishedThisMonth,
+    weeklyTarget: goals.weeklyTarget,
+    monthlyTarget: goals.monthlyTarget,
+    goalsUpdatedAt: goals.updatedAt,
+    userTimeZone: userTz,
+    currentDate: nowInTz,
+    weekStart: weekStartStr,
+    weekEnd: weekEndStr,
+    monthStart: monthStartStr,
+    monthEnd: monthEndStr,
+    weeklyDays,
+    publishedDatesMap,
     recentActivity,
     lectureStats,
+  });
+});
+
+app.post('/api/faculty/analytics/goals', (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
+
+  const { weeklyTarget, monthlyTarget } = req.body || {};
+  const facultyEmail = facultyUser.email || 'faculty@vaani.edu';
+  const saved = saveFacultyAnalyticsGoals(facultyEmail, weeklyTarget, monthlyTarget);
+
+  // Log to lecture_access_logs in SQLite
+  try {
+    logLectureAccess({
+      id: 'log-goals-' + Date.now(),
+      studentEmail: facultyEmail,
+      studentName: facultyUser.name || 'Faculty',
+      recordingId: 0,
+      lectureTitle: 'Publishing Goals Target Updated in SQLite',
+      subject: 'Analytics Settings',
+      action: 'VIEW',
+      timestamp: new Date(),
+    });
+  } catch {}
+
+  return res.status(200).json({
+    success: true,
+    message: 'Publishing targets saved to SQLite database successfully.',
+    weeklyTarget: saved.weeklyTarget,
+    monthlyTarget: saved.monthlyTarget,
+    updatedAt: saved.updatedAt,
+  });
+});
+
+app.post('/api/recordings/:id/lecture-date', (req: Request, res: Response) => {
+  const facultyUser = requireFaculty(req, res);
+  if (!facultyUser) return;
+
+  const id = Number(req.params.id);
+  const rec = getRecordingById(id);
+  if (!rec) {
+    return res.status(404).json({ error: 'Lecture not found in SQLite database.' });
+  }
+
+  const { lectureDate } = req.body || {};
+  if (!lectureDate || typeof lectureDate !== 'string' || !lectureDate.trim()) {
+    return res.status(400).json({ error: 'A valid lecture publication date (YYYY-MM-DD) is required.' });
+  }
+
+  const trimmedDate = lectureDate.trim();
+  rec.lectureDate = trimmedDate;
+  updateRecording(rec);
+  updateRecordingLectureDate(id, trimmedDate);
+
+  const userTz = getRequestTimeZone(req);
+  return res.status(200).json({
+    success: true,
+    message: 'Lecture publication date updated in SQLite database.',
+    recording: toRecordingDto(rec, userTz),
   });
 });
 

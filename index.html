@@ -7,6 +7,9 @@
   <meta name="description" content="AI-powered voice recording, transcription, and lecture summarization platform for students, educators, and professionals.">
   <meta property="og:title" content="Vaani — AI Voice to Text &amp; Summarizer">
   <meta property="og:description" content="AI-powered voice recording, transcription, and lecture summarization platform for students, educators, and professionals.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css">
   <script src="https://unpkg.com/lucide@latest"></script>
   <script>
@@ -23,90 +26,145 @@
 
       <!-- STUDENT NAVIGATION -->
       <nav id="studentNav">
-        <button class="active" data-page="dashboard"><i data-lucide="layout-dashboard" class="icon-default"></i> Dashboard</button>
-        <button data-page="storageBoxes"><i data-lucide="archive" class="icon-default"></i> Recording Library</button>
-        <button data-page="recordings"><i data-lucide="library" class="icon-default"></i> Browse Lectures</button>
-        <button data-page="settings"><i data-lucide="settings" class="icon-default"></i> Settings</button>
+        <button class="active" data-page="dashboard"><i data-lucide="layout-dashboard"></i> Dashboard</button>
+        <button data-page="storageBoxes"><i data-lucide="archive"></i> Storage Boxes</button>
+        <button data-page="recordings"><i data-lucide="library"></i> Browse Lectures</button>
+        <button data-page="settings"><i data-lucide="settings"></i> Settings</button>
       </nav>
 
       <!-- FACULTY NAVIGATION -->
       <nav id="facultyNav" class="hidden">
-        <button class="active" data-page="facultyDashboard"><i data-lucide="layout-dashboard" class="icon-default"></i> Dashboard</button>
-        <button data-page="storageBoxes"><i data-lucide="archive" class="icon-default"></i> Storage Boxes</button>
-        <button data-page="facultyLectures"><i data-lucide="book-open" class="icon-default"></i> My Lectures</button>
-        <button data-page="facultyUpload"><i data-lucide="upload" class="icon-default"></i> Create Lecture</button>
-        <button data-page="facultyAnalytics"><i data-lucide="bar-chart-3" class="icon-default"></i> Analytics</button>
-        <button data-page="facultyProfile"><i data-lucide="user" class="icon-default"></i> Profile</button>
-        <button data-page="settings"><i data-lucide="settings" class="icon-default"></i> Settings</button>
+        <button class="active" data-page="facultyDashboard"><i data-lucide="layout-dashboard"></i> Dashboard</button>
+        <button data-page="storageBoxes"><i data-lucide="archive"></i> Storage Boxes</button>
+        <button data-page="facultyLectures"><i data-lucide="book-open"></i> My Lectures</button>
+        <button data-page="facultyUpload"><i data-lucide="mic"></i> Create Lecture</button>
+        <button data-page="facultyAnalytics"><i data-lucide="bar-chart-2"></i> Analytics</button>
+        <button data-page="facultyProfile"><i data-lucide="user"></i> Profile</button>
+        <button data-page="settings"><i data-lucide="settings"></i> Settings</button>
       </nav>
 
-      <button class="logout" id="logout"><i data-lucide="log-out" class="icon-default"></i> Logout</button>
+      <button class="logout" id="logout"><i data-lucide="log-out"></i> Logout</button>
     </aside>
 
     <main>
       <header>
-        <span class="mobile-brand"><b>Vaani</b></span>
-        <div id="studentHeaderActions" style="display:flex;align-items:center;gap:8px;">
-          <button class="outline" data-page="storageBoxes"><i data-lucide="archive" class="icon-primary"></i> Boxes</button>
-          <button class="primary" data-page="recordings"><i data-lucide="library" style="color:white"></i> Browse Lectures</button>
+        <span class="mobile-brand">Vaani</span>
+        <div id="studentHeaderActions" style="display:flex;align-items:center;gap:10px;">
+          <button class="outline" data-page="storageBoxes"><i data-lucide="archive"></i> Storage Boxes</button>
+          <button class="primary" data-page="recordings"><i data-lucide="library"></i> Browse Lectures</button>
         </div>
-        <div id="facultyHeaderActions" class="hidden" style="display:flex;align-items:center;gap:8px;">
-          <button class="primary" data-page="facultyUpload"><i data-lucide="plus" style="color:white"></i> Create Lecture</button>
-          <button class="outline" data-page="storageBoxes"><i data-lucide="archive" class="icon-primary"></i> Storage Boxes</button>
-          <button class="outline" data-page="facultyLectures"><i data-lucide="book-open" class="icon-primary"></i> My Lectures</button>
+        <div id="facultyHeaderActions" class="hidden" style="display:flex;align-items:center;gap:10px;">
+          <button class="primary" data-page="facultyUpload"><i data-lucide="plus"></i> Create Lecture</button>
+          <button class="outline" data-page="storageBoxes"><i data-lucide="archive"></i> Storage Boxes</button>
+          <button class="outline" data-page="facultyLectures"><i data-lucide="book-open"></i> My Lectures</button>
         </div>
-        <span class="role-pill" id="headerRoleBadge"><i data-lucide="user" class="icon-primary"></i> Student</span>
-        <span class="profile" id="profileName">User</span>
-        <button class="outline" id="headerLogoutBtn" style="padding:9px 13px;font-size:12.5px;"><i data-lucide="log-out" class="icon-primary"></i> Logout</button>
+        <span class="role-pill" id="headerRoleBadge"><i data-lucide="user"></i> Student</span>
+        <span class="profile" id="profileName"><i data-lucide="user-circle" style="width:16px;height:16px;color:var(--muted)"></i> User</span>
+        <button class="outline" id="headerLogoutBtn" style="padding:8px 14px;font-size:12.5px;"><i data-lucide="log-out"></i> Logout</button>
       </header>
 
       <!-- ═══════════════════════════════════════════════════════════════════ -->
-      <!-- 👨‍🏫 FACULTY INTERFACE SECTIONS                                       -->
+      <!-- 🎓 STUDENT DASHBOARD SECTION                                        -->
       <!-- ═══════════════════════════════════════════════════════════════════ -->
-
-      <!-- 1. FACULTY DASHBOARD -->
-      <section id="facultyDashboard" class="page">
-        <p class="eyebrow" id="facultyEyebrow">Welcome back, Professor!</p>
+      <section id="dashboard" class="page active">
+        <p class="eyebrow">Student Workspace</p>
         <div class="detailhead">
           <div>
-            <h1>Faculty Dashboard</h1>
-            <p class="muted">Create, review, and publish AI-processed lectures for your students.</p>
+            <h1>Student Dashboard</h1>
+            <p class="muted">Access verified lecture recordings, transcripts, and AI-generated study summaries.</p>
           </div>
-          <button class="primary" data-page="facultyUpload" style="font-size:14px;padding:12px 20px;">+ Create New Lecture</button>
+          <div style="display:flex;gap:10px;">
+            <button class="primary" data-page="recordings"><i data-lucide="library"></i> Browse Lectures</button>
+            <button class="outline" data-page="storageBoxes"><i data-lucide="archive"></i> Storage Boxes</button>
+          </div>
         </div>
 
-        <div class="stats stats-4">
+        <div class="stats stats-2">
           <div class="stat-card">
-            <span class="stat-icon"><i data-lucide="bar-chart-3" class="icon-default"></i></span>
-            <b id="facStatTotal">0</b>
-            <small>Total Lectures</small>
+            <span class="stat-icon"><i data-lucide="book-open"></i></span>
+            <b id="statSummaries">0</b>
+            <small>Published Lectures Available</small>
           </div>
           <div class="stat-card">
-            <span class="stat-icon"><i data-lucide="check" class="icon-success"></i></span>
-            <b id="facStatPublished">0</b>
-            <small>Published Lectures</small>
-          </div>
-          <div class="stat-card">
-            <span class="stat-icon"><i data-lucide="file-pen-line" class="icon-default"></i></span>
-            <b id="facStatDraft">0</b>
-            <small>Draft / Ready for Review</small>
-          </div>
-          <div class="stat-card">
-            <span class="stat-icon"><i data-lucide="loader-circle" class="icon-default"></i></span>
-            <b id="facStatProcessing">0</b>
-            <small>Processing Lectures</small>
+            <span class="stat-icon"><i data-lucide="headphones"></i></span>
+            <b id="statAudio">0.0 hrs</b>
+            <small>Total Classroom Audio Available</small>
           </div>
         </div>
 
         <div class="card">
           <div class="cardhead">
             <div>
-              <h2>Recent Lectures</h2>
-              <p class="muted" style="font-size:12.5px;margin-top:2px;">Process each lecture once — all authorized students share the verified transcript and AI summary.</p>
+              <h2>Recent Verified Lectures</h2>
+              <p class="muted" style="font-size:12.5px;margin-top:2px;">Recent curriculum lectures reviewed and published by your faculty.</p>
+            </div>
+            <input id="studentDashSearch" type="text" class="meta-input" placeholder="Search recent lectures..." style="max-width:280px;margin-top:0;">
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Lecture Title</th>
+                  <th>Subject / Box</th>
+                  <th>Professor</th>
+                  <th>Duration</th>
+                  <th>Published Date</th>
+                  <th>Status</th>
+                  <th>Audio</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 👨‍🏫 FACULTY DASHBOARD                                              -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <section id="facultyDashboard" class="page">
+        <p class="eyebrow" id="facultyEyebrow">Faculty Workspace</p>
+        <div class="detailhead">
+          <div>
+            <h1>Faculty Dashboard</h1>
+            <p class="muted">Record, verify, and publish AI-processed lectures for your students.</p>
+          </div>
+          <button class="primary" data-page="facultyUpload"><i data-lucide="plus"></i> Create New Lecture</button>
+        </div>
+
+        <div class="stats stats-4">
+          <div class="stat-card">
+            <span class="stat-icon"><i data-lucide="bar-chart-2"></i></span>
+            <b id="facStatTotal">0</b>
+            <small>Total Lectures</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon"><i data-lucide="check-circle-2"></i></span>
+            <b id="facStatPublished">0</b>
+            <small>Published to Students</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon"><i data-lucide="file-edit"></i></span>
+            <b id="facStatDraft">0</b>
+            <small>Draft / Ready for Review</small>
+          </div>
+          <div class="stat-card">
+            <span class="stat-icon"><i data-lucide="clock"></i></span>
+            <b id="facStatProcessing">0</b>
+            <small>Processing Transcripts</small>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="cardhead">
+            <div>
+              <h2>Recent Course Lectures</h2>
+              <p class="muted" style="font-size:12.5px;margin-top:2px;">Single-source classroom recordings shared with enrolled course sections.</p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="primary" data-page="facultyUpload" style="padding:8px 14px;font-size:12.5px;">+ Create New Lecture</button>
-              <button class="outline" data-page="facultyLectures" style="padding:8px 14px;font-size:12.5px;">Manage All Lectures</button>
+              <button class="primary" data-page="facultyUpload"><i data-lucide="plus"></i> Create Lecture</button>
+              <button class="outline" data-page="facultyLectures"><i data-lucide="book-open"></i> Manage All Lectures</button>
             </div>
           </div>
           <div class="table-wrap">
@@ -114,7 +172,7 @@
               <thead>
                 <tr>
                   <th>Lecture Title</th>
-                  <th>Subject</th>
+                  <th>Subject / Box</th>
                   <th>Class / Course</th>
                   <th>Date</th>
                   <th>Status</th>
@@ -128,79 +186,114 @@
         </div>
       </section>
 
-      <!-- 2. UPLOAD LECTURE (FACULTY) -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 2. CREATE LECTURE (LIVE RECORDING)                                  -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
       <section id="facultyUpload" class="page">
-        <div class="crumb">Faculty Dashboard &rsaquo; Create New Lecture</div>
+        <div class="crumb">Faculty Dashboard &rsaquo; <span>Create New Lecture</span></div>
         <div class="detailhead">
           <div>
-            <h1>🎙️ Create New Lecture</h1>
-            <p class="muted">Upload a classroom lecture recording or record live. Vaani AI will automatically generate the transcript and summary for your review.</p>
+            <h1><i data-lucide="mic" class="header-icon"></i> Record New Lecture</h1>
+            <p class="muted">Capture live classroom audio. Vaani AI automatically structures the lecture transcript and educational summary for your review.</p>
           </div>
-          <button class="outline" data-page="facultyLectures">📚 View My Lectures</button>
+          <button class="outline" data-page="facultyLectures"><i data-lucide="book-open"></i> View My Lectures</button>
         </div>
 
         <!-- AI Processing Pipeline Status Banner -->
         <div class="card pipeline-card" id="facPipelineCard">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;">
-            <b style="color:var(--p);font-size:13.5px;">🤖 AI Lecture Processing Pipeline</b>
-            <span class="badge status-badge-ready" id="facPipelineStateBadge">Ready to Create</span>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <i data-lucide="sparkles" style="width:16px;height:16px;color:var(--p)"></i>
+              <b style="color:var(--p);font-size:13.5px;">AI Lecture Processing Pipeline</b>
+            </div>
+            <span class="badge status-badge-ready" id="facPipelineStateBadge"><i data-lucide="check"></i> Ready to Record</span>
           </div>
           <div class="pipeline-steps" id="facPipelineSteps">
             <div class="pipeline-step" data-step="upload">
-              <span class="step-dot">🎙️</span>
-              <b>1. Audio Created</b>
-              <small>MP3 / WAV / M4A</small>
+              <span class="step-icon"><i data-lucide="mic"></i></span>
+              <b>1. Audio Capture</b>
+              <small>Live Classroom Mic</small>
             </div>
             <div class="pipeline-arrow">&rarr;</div>
             <div class="pipeline-step" data-step="stt">
-              <span class="step-dot">📝</span>
+              <span class="step-icon"><i data-lucide="file-text"></i></span>
               <b>2. Speech-to-Text</b>
-              <small>Transcript Generated</small>
+              <small>Verbatim Transcript</small>
             </div>
             <div class="pipeline-arrow">&rarr;</div>
             <div class="pipeline-step" data-step="summary">
-              <span class="step-dot">🤖</span>
-              <b>3. AI Summary</b>
-              <small>Key Insights &amp; Notes</small>
+              <span class="step-icon"><i data-lucide="sparkles"></i></span>
+              <b>3. AI Synthesis</b>
+              <small>Key Concepts &amp; Notes</small>
             </div>
             <div class="pipeline-arrow">&rarr;</div>
             <div class="pipeline-step" data-step="ready">
-              <span class="step-dot">✅</span>
-              <b>4. Ready for Review</b>
-              <small>Faculty Verification</small>
+              <span class="step-icon"><i data-lucide="check-circle-2"></i></span>
+              <b>4. Faculty Review</b>
+              <small>Verification &amp; Publish</small>
             </div>
           </div>
         </div>
 
-        <form id="facultyUploadForm" class="card" style="max-width:860px;">
-          <h2 style="margin-top:0;margin-bottom:16px;">Lecture Information</h2>
+        <form id="facultyUploadForm" class="card" style="max-width:880px;">
+          <h2 style="margin-top:0;margin-bottom:16px;">Lecture Metadata</h2>
           <div class="form-grid-2">
             <label class="meta-label">
               Lecture Title *
               <input id="facTitleInput" type="text" placeholder="e.g. Lecture 04 — Binary Search Trees &amp; AVL Rotations" class="meta-input" required>
             </label>
             <label class="meta-label">
-              Select Storage Box (Dynamic / Any Name)
-              <div style="display:flex;gap:6px;align-items:center;">
+              Storage Box (Thematic Module)
+              <div style="display:flex;gap:8px;align-items:center;">
                 <select id="facStorageBoxSelect" class="meta-input" style="flex:1;">
-                  <option value="">-- No Box (Independent Lecture) --</option>
+                  <option value="">-- Independent Lecture (No Box) --</option>
                 </select>
-                <button type="button" class="outline" id="facQuickNewBoxBtn" title="Create New Storage Box" style="padding:10px 12px;margin-top:6px;white-space:nowrap;font-size:12px;">+ New Box</button>
+                <button type="button" class="outline" id="facQuickNewBoxBtn" title="Create New Storage Box" style="padding:10px 14px;margin-top:6px;white-space:nowrap;font-size:12.5px;"><i data-lucide="plus"></i> New Box</button>
               </div>
             </label>
             <label class="meta-label">
               Subject / Topic Name
-              <input id="facSubjectInput" type="text" placeholder="e.g. Data Structures" class="meta-input">
+              <input id="facSubjectInput" type="text" placeholder="e.g. Data Structures &amp; Algorithms" class="meta-input">
             </label>
             <label class="meta-label">
-              Class / Course *
-              <select id="facCourseInput" class="meta-input">
-                <option value="SE Computer Engineering">SE Computer Engineering</option>
-                <option value="TE Computer Engineering">TE Computer Engineering</option>
-                <option value="BE Computer Engineering">BE Computer Engineering</option>
-                <option value="FE General Engineering">FE General Engineering</option>
-                <option value="M.Tech AI & Data Science">M.Tech AI &amp; Data Science</option>
+              Branch *
+              <select id="facBranchInput" class="meta-input">
+                <option value="Computer Engineering">Computer Engineering</option>
+                <option value="Computer Science and Engineering (CSE)">Computer Science and Engineering (CSE)</option>
+                <option value="Information Technology (IT)">Information Technology (IT)</option>
+                <option value="Artificial Intelligence and Data Science (AI & DS)">Artificial Intelligence and Data Science (AI &amp; DS)</option>
+                <option value="Artificial Intelligence and Machine Learning (AI & ML)">Artificial Intelligence and Machine Learning (AI &amp; ML)</option>
               </select>
+            </label>
+            <label class="meta-label">
+              Academic Year *
+              <select id="facYearInput" class="meta-input">
+                <option value="First Year (FE)">First Year (FE)</option>
+                <option value="Second Year (SE)" selected>Second Year (SE)</option>
+                <option value="Third Year (TE)">Third Year (TE)</option>
+                <option value="Final Year (BE)">Final Year (BE)</option>
+              </select>
+            </label>
+            <label class="meta-label">
+              Semester &amp; Division *
+              <div style="display:flex;gap:8px;">
+                <select id="facSemInput" class="meta-input" style="flex:1;">
+                  <option value="Semester 1">Semester 1</option>
+                  <option value="Semester 2">Semester 2</option>
+                  <option value="Semester 3" selected>Semester 3</option>
+                  <option value="Semester 4">Semester 4</option>
+                  <option value="Semester 5">Semester 5</option>
+                  <option value="Semester 6">Semester 6</option>
+                  <option value="Semester 7">Semester 7</option>
+                  <option value="Semester 8">Semester 8</option>
+                </select>
+                <select id="facDivInput" class="meta-input" style="width:110px;">
+                  <option value="Division A">Div A</option>
+                  <option value="Division B">Div B</option>
+                  <option value="Division C">Div C</option>
+                  <option value="Division D">Div D</option>
+                </select>
+              </div>
             </label>
             <label class="meta-label">
               Lecture Date *
@@ -209,71 +302,77 @@
           </div>
 
           <label class="meta-label" style="margin-top:14px;">
-            Description / Learning Objectives
-            <textarea id="facDescInput" class="meta-input" rows="3" placeholder="Brief overview of topics covered, textbook chapters, or instructions for students..."></textarea>
+            Description / Syllabus Objectives
+            <textarea id="facDescInput" class="meta-input" rows="3" placeholder="Overview of key theorems, textbook chapters, or pre-reading instructions..."></textarea>
           </label>
 
-          <div style="margin-top:18px;">
-            <!-- TAB 2: LIVE RECORDING -->
-            <div id="facRecordPane" class="card recorder" style="margin-top:0;border:1px dashed #cfc5ee;">
-              <div class="recordpane" style="padding:32px 20px;">
+          <!-- LIVE RECORDING INTERFACE WITH AUDIO-RESPONSIVE WAVEFORM -->
+          <div style="margin-top:22px;">
+            <div id="facRecordPane" class="card recorder" style="margin-top:0;">
+              <div class="recordpane">
                 <button type="button" id="facMicBtn" class="mic" title="Start Recording Lecture">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="white" width="36" height="36">
-                    <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
-                    <path d="M19 11a1 1 0 0 0-2 0 5 5 0 0 1-10 0 1 1 0 0 0-2 0 7 7 0 0 0 6 6.92V20H9a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2h-2v-2.08A7 7 0 0 0 19 11z"/>
-                  </svg>
+                  <i data-lucide="mic"></i>
                 </button>
-                <h3 id="facRecordMsg" style="margin:10px 0 6px;">🎙️ Start Recording Lecture</h3>
-                <div id="facTimer" style="font-size:26px;font-weight:800;color:var(--p);margin:8px 0;">00:00:00</div>
-                <p id="facRecordStatus" class="muted" style="margin:0;font-size:13px;">Click microphone or "🎙️ Start Recording" to record live classroom audio</p>
-                <div class="actions" style="max-width:440px;margin:20px auto 0;gap:10px;justify-content:center;flex-wrap:wrap;">
-                  <button type="button" class="primary" id="facStartRecBtn">🎙️ Start Recording</button>
-                  <button type="button" class="primary disabled" disabled id="facStopRecBtn">⏹️ Stop Recording</button>
-                  <button type="button" class="outline" id="facResetRecBtn">Reset</button>
+                <h3 id="facRecordMsg">Classroom Microphone</h3>
+                <div id="facTimer">00:00:00</div>
+                <p id="facRecordStatus" class="muted" style="margin:0;font-size:13px;">Click the microphone or "Start Recording" to capture classroom audio.</p>
+
+                <!-- Responsive Live Waveform Visualizer -->
+                <div class="waveform-container" id="facWaveformContainer" style="display: none;">
+                  <canvas id="facWaveformCanvas" width="540" height="72" class="fac-waveform-canvas"></canvas>
+                </div>
+
+                <div class="actions" style="max-width:520px;margin:18px auto 0;gap:10px;justify-content:center;display:flex;flex-wrap:wrap;">
+                  <button type="button" class="primary" id="facStartRecBtn"><i data-lucide="mic"></i> Start Recording</button>
+                  <button type="button" class="outline disabled" disabled id="facPauseRecBtn"><i data-lucide="pause"></i> Pause</button>
+                  <button type="button" class="primary disabled" disabled id="facStopRecBtn" style="background:#991b1b;border-color:#991b1b;"><i data-lucide="square"></i> Stop Recording</button>
+                  <button type="button" class="outline" id="facResetRecBtn"><i data-lucide="rotate-ccw"></i> Reset</button>
                 </div>
               </div>
             </div>
 
-            <div id="facUploadErrorBox" class="hidden" style="margin-top:12px;padding:12px 16px;border-radius:10px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
-              <span id="facUploadErrorMsg" style="font-weight:600;font-size:13px;">❌ Upload failed. Please try again.</span>
-              <button type="button" class="outline" id="facRetryUploadBtn" style="padding:6px 14px;font-size:12.5px;border-color:#f87171;color:#b91c1c;background:#fff;">🔄 Retry</button>
+            <div id="facUploadErrorBox" class="hidden" style="margin-top:14px;padding:14px 18px;border-radius:10px;background:var(--danger-bg);border:1px solid var(--danger-border);color:var(--danger);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+              <span id="facUploadErrorMsg" style="font-weight:600;font-size:13px;">Recording failed. Please try again.</span>
+              <button type="button" class="outline" id="facRetryUploadBtn" style="padding:6px 14px;font-size:12.5px;border-color:var(--danger-border);color:var(--danger);background:#fff;"><i data-lucide="refresh-cw"></i> Retry</button>
             </div>
           </div>
 
-          <div style="display:flex;gap:12px;align-items:center;margin-top:22px;flex-wrap:wrap;">
-            <button type="submit" class="primary" id="facSubmitUploadBtn" style="padding:12px 22px;font-size:14px;">
-              💾 Save Recording &amp; Process AI
+          <div style="display:flex;gap:12px;align-items:center;margin-top:24px;flex-wrap:wrap;">
+            <button type="submit" class="primary" id="facSubmitUploadBtn" style="padding:12px 24px;font-size:14px;">
+              <i data-lucide="sparkles"></i> Save Recording &amp; Process AI
             </button>
-            <button type="button" class="outline" id="facSaveDraftBtn" style="padding:12px 18px;">
-              📝 Save as Draft
+            <button type="button" class="outline" id="facSaveDraftBtn" style="padding:12px 20px;">
+              <i data-lucide="file-edit"></i> Save as Draft
             </button>
           </div>
         </form>
       </section>
 
-      <!-- 3. FACULTY REVIEW & PUBLISH PAGE -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 3. FACULTY REVIEW & PUBLISH PAGE                                    -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
       <section id="facultyReview" class="page">
-        <div class="crumb">Faculty Dashboard &rsaquo; My Lectures &rsaquo; Review &amp; Publish</div>
+        <div class="crumb">Faculty Dashboard &rsaquo; My Lectures &rsaquo; <span>Review &amp; Publish</span></div>
         <div class="detailhead">
           <div>
             <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
               <h1 id="facReviewTitle" style="margin:0;">Lecture Review</h1>
-              <span class="badge" id="facReviewStatusBadge">✅ READY</span>
+              <span class="badge" id="facReviewStatusBadge"><i data-lucide="check"></i> READY</span>
             </div>
             <p class="muted" id="facReviewMeta" style="margin-top:6px;">Subject &bull; Course &bull; Date</p>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;">
-            <button class="primary btn-publish" id="facPublishBtn" type="button">🚀 PUBLISH LECTURE</button>
-            <button class="outline btn-unpublish" id="facUnpublishBtn" type="button">🔒 UNPUBLISH</button>
+            <button class="primary" id="facPublishBtn" type="button" style="background:var(--success);border-color:var(--success);"><i data-lucide="send"></i> Publish Lecture</button>
+            <button class="outline" id="facUnpublishBtn" type="button" style="color:var(--warning);border-color:var(--warning-border);background:var(--warning-bg);"><i data-lucide="lock"></i> Unpublish</button>
             <label class="outline" for="facReplaceAudioInput" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;margin:0;">
-              🔄 Replace Audio
+              <i data-lucide="refresh-cw"></i> Replace Audio
               <input id="facReplaceAudioInput" type="file" accept="audio/*,.mp3,.wav,.webm,.m4a,.aac,.ogg,.flac,.mp4" style="display:none;">
             </label>
           </div>
         </div>
 
         <!-- Lecture Metadata Quick Edit Bar -->
-        <div class="card" style="padding:16px 20px;">
+        <div class="card" style="padding:18px 22px;">
           <div class="form-grid-4">
             <label class="meta-label">
               Lecture Title
@@ -282,7 +381,7 @@
             <label class="meta-label">
               Storage Box
               <select id="facReviewStorageBoxSelect" class="meta-input">
-                <option value="">-- No Box --</option>
+                <option value="">-- Independent Lecture --</option>
               </select>
             </label>
             <label class="meta-label">
@@ -298,42 +397,44 @@
               <input id="facReviewDateInput" type="date" class="meta-input">
             </label>
           </div>
-          <div style="display:flex;justify-content:flex-end;margin-top:12px;">
-            <button type="button" class="outline" id="facSaveMetaBtn" style="padding:7px 14px;font-size:12.5px;">💾 Save Lecture Details</button>
+          <div style="display:flex;justify-content:flex-end;margin-top:14px;">
+            <button type="button" class="outline" id="facSaveMetaBtn" style="padding:8px 16px;font-size:12.5px;"><i data-lucide="save"></i> Save Lecture Details</button>
           </div>
         </div>
 
-        <!-- 🎙 Lecture Audio Player -->
-        <div class="card" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:16px 20px;">
-          <span style="font-weight:700;color:var(--p);white-space:nowrap;font-size:14px;">🎙️ Lecture Audio:</span>
+        <!-- Lecture Audio Player -->
+        <div class="card" style="display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding:18px 22px;">
+          <span style="font-weight:700;color:var(--p);white-space:nowrap;font-size:13.5px;display:inline-flex;align-items:center;gap:6px;">
+            <i data-lucide="headphones" style="width:16px;height:16px;"></i> Recorded Audio:
+          </span>
           <audio id="facReviewAudioPlayer" controls style="flex:1;min-width:240px;height:40px;outline:none;"></audio>
-          <span class="muted" id="facReviewDurationLabel" style="font-size:12.5px;font-weight:600;">Duration: 00:00</span>
+          <span class="muted" id="facReviewDurationLabel" style="font-size:12.5px;font-family:var(--font-mono);font-weight:600;">Duration: 00:00</span>
         </div>
 
         <!-- Review Grid: Transcript & AI Summary -->
         <div class="review-grid">
-          <!-- 📝 Transcript Card -->
+          <!-- Transcript Card -->
           <div class="card review-col">
-            <div class="cardhead" style="margin-bottom:12px;flex-wrap:wrap;">
-              <h2><i data-lucide="file-text" class="icon-default"></i> Transcript</h2>
+            <div class="cardhead" style="margin-bottom:14px;flex-wrap:wrap;">
+              <h2><i data-lucide="file-text"></i> Lecture Transcript</h2>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <button type="button" class="outline" id="facRegenTranscriptBtn" style="padding:6px 10px;font-size:12px;"><i data-lucide="refresh-cw" class="icon-default"></i> Generate Transcript</button>
-                <button type="button" class="outline" id="facEditTranscriptBtn" style="padding:6px 12px;font-size:12px;"><i data-lucide="pencil" class="icon-default"></i> Edit Transcript</button>
-                <button type="button" class="primary hidden" id="facSaveTranscriptBtn" style="padding:6px 12px;font-size:12px;"><i data-lucide="save" style="color:white"></i> Save Transcript</button>
+                <button type="button" class="outline" id="facRegenTranscriptBtn" style="padding:6px 12px;font-size:12px;"><i data-lucide="refresh-cw"></i> Regenerate</button>
+                <button type="button" class="outline" id="facEditTranscriptBtn" style="padding:6px 12px;font-size:12px;"><i data-lucide="pencil"></i> Edit</button>
+                <button type="button" class="primary hidden" id="facSaveTranscriptBtn" style="padding:6px 12px;font-size:12px;"><i data-lucide="save"></i> Save</button>
               </div>
             </div>
             <div id="facTranscriptView" class="review-content-box"></div>
             <textarea id="facTranscriptEditor" class="review-textarea hidden" rows="12" placeholder="Edit lecture transcript..."></textarea>
           </div>
 
-          <!-- 📄 AI Summary Card -->
+          <!-- AI Summary Card -->
           <div class="card review-col">
-            <div class="cardhead" style="margin-bottom:12px;flex-wrap:wrap;">
-              <h2><i data-lucide="file-text" class="icon-default"></i> AI Summary</h2>
+            <div class="cardhead" style="margin-bottom:14px;flex-wrap:wrap;">
+              <h2><i data-lucide="sparkles"></i> AI Summary &amp; Notes</h2>
               <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <button type="button" class="outline" id="facRegenSummaryBtn" style="padding:6px 10px;font-size:12px;">🔄 Generate Summary</button>
-                <button type="button" class="outline" id="facEditSummaryBtn" style="padding:6px 12px;font-size:12px;">✏ Edit Summary</button>
-                <button type="button" class="primary hidden" id="facSaveSummaryBtn" style="padding:6px 12px;font-size:12px;">💾 Save Summary</button>
+                <button type="button" class="outline" id="facRegenSummaryBtn" style="padding:6px 12px;font-size:12px;"><i data-lucide="refresh-cw"></i> Regenerate</button>
+                <button type="button" class="outline" id="facEditSummaryBtn" style="padding:6px 12px;font-size:12px;"><i data-lucide="pencil"></i> Edit</button>
+                <button type="button" class="primary hidden" id="facSaveSummaryBtn" style="padding:6px 12px;font-size:12px;"><i data-lucide="save"></i> Save</button>
               </div>
             </div>
             <div id="facSummaryView" class="review-content-box" style="white-space:pre-wrap;"></div>
@@ -341,71 +442,75 @@
           </div>
         </div>
 
-        <!-- 👥 STUDENT ACCESS CONTROL -->
+        <!-- Student Access Control -->
         <div class="card">
-          <div class="cardhead" style="margin-bottom:12px;">
+          <div class="cardhead" style="margin-bottom:14px;">
             <div>
-              <h2>👥 Student Access Control</h2>
-              <p class="muted" style="font-size:12.5px;margin-top:2px;">Select which classes, courses, and subject batches can access this published lecture.</p>
+              <h2><i data-lucide="users"></i> Student Access Control</h2>
+              <p class="muted" style="font-size:12.5px;margin-top:2px;">Specify which academic cohorts and classes can access this verified lecture.</p>
             </div>
-            <button type="button" class="primary" id="facApplyAccessBtn" style="padding:9px 18px;font-size:13px;">Apply Access</button>
+            <button type="button" class="primary" id="facApplyAccessBtn" style="padding:9px 18px;font-size:13px;"><i data-lucide="check"></i> Apply Access</button>
           </div>
           <div class="access-checkbox-grid" id="facAccessCheckboxes">
             <label class="access-check-item">
-              <input type="checkbox" value="SE Computer Engineering" checked>
-              <span>SE Computer Engineering</span>
+              <input type="checkbox" value="Computer Engineering" checked>
+              <span>Computer Engineering</span>
             </label>
             <label class="access-check-item">
-              <input type="checkbox" value="TE Computer Engineering">
-              <span>TE Computer Engineering</span>
+              <input type="checkbox" value="Computer Science and Engineering (CSE)">
+              <span>Computer Science &amp; Engineering (CSE)</span>
             </label>
             <label class="access-check-item">
-              <input type="checkbox" value="BE Computer Engineering">
-              <span>BE Computer Engineering</span>
+              <input type="checkbox" value="Information Technology (IT)">
+              <span>Information Technology (IT)</span>
             </label>
             <label class="access-check-item">
-              <input type="checkbox" value="Data Structures" checked>
-              <span>Data Structures</span>
+              <input type="checkbox" value="Artificial Intelligence and Data Science (AI & DS)">
+              <span>AI &amp; Data Science (AI &amp; DS)</span>
             </label>
             <label class="access-check-item">
-              <input type="checkbox" value="AI & Machine Learning" checked>
-              <span>AI &amp; Machine Learning</span>
+              <input type="checkbox" value="Artificial Intelligence and Machine Learning (AI & ML)" checked>
+              <span>AI &amp; Machine Learning (AI &amp; ML)</span>
             </label>
             <label class="access-check-item">
-              <input type="checkbox" value="Deep Learning">
-              <span>Deep Learning</span>
+              <input type="checkbox" value="First Year (FE)">
+              <span>First Year (FE)</span>
             </label>
             <label class="access-check-item">
-              <input type="checkbox" value="Software Engineering">
-              <span>Software Engineering</span>
+              <input type="checkbox" value="Second Year (SE)" checked>
+              <span>Second Year (SE)</span>
             </label>
             <label class="access-check-item">
-              <input type="checkbox" value="Innovation Lab">
-              <span>Innovation Lab</span>
+              <input type="checkbox" value="Third Year (TE)">
+              <span>Third Year (TE)</span>
+            </label>
+            <label class="access-check-item">
+              <input type="checkbox" value="Final Year (BE)">
+              <span>Final Year (BE)</span>
             </label>
           </div>
 
-          <!-- REGISTERED STUDENT EMAIL PERMISSIONS -->
-          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
-              <span style="font-weight:700;font-size:13px;color:var(--text);">🎓 Specific Registered Student Permissions:</span>
-              <span class="badge" id="reviewStudentCountBadge">All Registered Students</span>
+          <!-- Specific Student Email Permissions -->
+          <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+              <span style="font-weight:700;font-size:13px;color:var(--text);">Individual Student Access:</span>
+              <span class="badge" id="reviewStudentCountBadge"><i data-lucide="users"></i> All Enrolled Students</span>
             </div>
-            <div style="display:flex;gap:14px;margin-bottom:10px;font-size:12.5px;">
+            <div style="display:flex;gap:16px;margin-bottom:12px;font-size:13px;">
               <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="radio" name="reviewStudentScope" id="reviewScopeAll" value="ALL" checked>
+                <input type="radio" name="reviewStudentScope" id="reviewScopeAll" value="ALL" checked accent-color="var(--p)">
                 <span>All Enrolled Students</span>
               </label>
               <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
-                <input type="radio" name="reviewStudentScope" id="reviewScopeSpecific" value="SPECIFIC">
-                <span>Choose Specific Students</span>
+                <input type="radio" name="reviewStudentScope" id="reviewScopeSpecific" value="SPECIFIC" accent-color="var(--p)">
+                <span>Select Specific Students</span>
               </label>
             </div>
             <div id="reviewStudentPickerWrap" class="hidden">
-              <div style="display:flex;gap:6px;margin-bottom:8px;">
-                <input type="text" id="reviewStudentFilterInput" class="meta-input" placeholder="🔍 Search students by name or email..." style="margin-top:0;font-size:12px;padding:6px 10px;">
-                <button type="button" class="outline" id="reviewSelectAllStudentsBtn" style="padding:6px 10px;font-size:11.5px;white-space:nowrap;">Select All</button>
-                <button type="button" class="outline" id="reviewClearStudentsBtn" style="padding:6px 10px;font-size:11.5px;white-space:nowrap;">Clear</button>
+              <div style="display:flex;gap:8px;margin-bottom:10px;">
+                <input type="text" id="reviewStudentFilterInput" class="meta-input" placeholder="Search students by name or email..." style="margin-top:0;font-size:12.5px;padding:7px 12px;">
+                <button type="button" class="outline" id="reviewSelectAllStudentsBtn" style="padding:6px 12px;font-size:12px;white-space:nowrap;">Select All</button>
+                <button type="button" class="outline" id="reviewClearStudentsBtn" style="padding:6px 12px;font-size:12px;white-space:nowrap;">Clear</button>
               </div>
               <div id="reviewStudentChecklist" class="student-checklist-scroll"></div>
             </div>
@@ -413,27 +518,29 @@
         </div>
       </section>
 
-      <!-- 4. MANAGE LECTURES (MY LECTURES PAGE FOR FACULTY) -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 4. MANAGE LECTURES (MY LECTURES)                                    -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
       <section id="facultyLectures" class="page">
-        <div class="crumb">Faculty Dashboard &rsaquo; My Lectures</div>
+        <div class="crumb">Faculty Dashboard &rsaquo; <span>My Lectures</span></div>
         <div class="detailhead">
           <div>
-            <h1>📚 My Lectures</h1>
-            <p class="muted">Manage all uploaded lectures, edit transcripts &amp; summaries, replace audio, or publish/unpublish for students.</p>
+            <h1><i data-lucide="book-open" class="header-icon"></i> My Lectures</h1>
+            <p class="muted">Manage all course lectures, verify transcripts &amp; summaries, or publish for student access.</p>
           </div>
-          <button class="primary" data-page="facultyUpload">+ Create New Lecture</button>
+          <button class="primary" data-page="facultyUpload"><i data-lucide="plus"></i> Create New Lecture</button>
         </div>
 
         <div class="card">
-          <div class="cardhead" style="margin-bottom:14px;flex-wrap:wrap;">
-            <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex:1;">
-              <input id="facSearchInput" type="text" class="meta-input" placeholder="🔎 Search by title or subject..." style="max-width:300px;margin-top:0;">
-              <select id="facFilterStatus" class="meta-input" style="max-width:190px;margin-top:0;">
-                <option value="ALL">All Statuses</option>
-                <option value="PUBLISHED">🌐 PUBLISHED</option>
-                <option value="READY">✅ READY</option>
-                <option value="DRAFT">📝 DRAFT</option>
-                <option value="PROCESSING">⏳ PROCESSING</option>
+          <div class="cardhead" style="margin-bottom:16px;flex-wrap:wrap;">
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;flex:1;">
+              <input id="facSearchInput" type="text" class="meta-input" placeholder="Search by title or topic..." style="max-width:320px;margin-top:0;">
+              <select id="facFilterStatus" class="meta-input" style="max-width:200px;margin-top:0;">
+                <option value="ALL">All Publication Statuses</option>
+                <option value="PUBLISHED">Published</option>
+                <option value="READY">Ready for Review</option>
+                <option value="DRAFT">Draft</option>
+                <option value="PROCESSING">Processing</option>
               </select>
             </div>
           </div>
@@ -442,7 +549,7 @@
               <thead>
                 <tr>
                   <th>Title</th>
-                  <th>Subject</th>
+                  <th>Subject / Box</th>
                   <th>Class / Course</th>
                   <th>Date</th>
                   <th>Status</th>
@@ -456,45 +563,203 @@
         </div>
       </section>
 
-      <!-- 5. BASIC ANALYTICS (FACULTY) -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 5. ANALYTICS & DIGITAL WELLBEING CADENCE                            -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
       <section id="facultyAnalytics" class="page">
-        <div class="crumb">Faculty Dashboard &rsaquo; Student &amp; Lecture Analytics</div>
+        <div class="crumb">Faculty Dashboard &rsaquo; <span>Student &amp; Lecture Analytics</span></div>
         <div class="detailhead" style="flex-wrap:wrap;gap:12px;">
           <div>
-            <h1>📊 Student &amp; Lecture Analytics</h1>
-            <p class="muted">Real-time visibility into registered students, lecture access permissions, and student study activity.</p>
+            <h1><i data-lucide="bar-chart-2" class="header-icon"></i> Student &amp; Lecture Analytics</h1>
+            <p class="muted">Monitor student engagement, teaching cadence, audio streams, and access activity in real time.</p>
           </div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <button class="outline" id="anaRefreshBtn" type="button" style="padding:10px 16px;font-size:13px;"><i data-lucide="refresh-cw" class="icon-primary"></i> Refresh</button>
-            <button class="primary" data-page="facultyLectures" style="padding:10px 16px;font-size:13px;"><i data-lucide="book-open" style="color:white"></i> Manage Lectures</button>
+            <button class="outline" id="anaRefreshBtn" type="button" style="padding:9px 16px;font-size:13px;"><i data-lucide="refresh-cw"></i> Refresh</button>
+            <button class="primary" data-page="facultyLectures" style="padding:9px 16px;font-size:13px;"><i data-lucide="book-open"></i> Manage Lectures</button>
           </div>
         </div>
 
+        <!-- ERROR BANNER -->
+        <div id="anaErrorBanner" class="ana-error-banner hidden">
+          <div class="ana-error-content">
+            <i data-lucide="alert-circle" class="ana-error-icon"></i>
+            <div>
+              <b id="anaErrorTitle">Unable to load analytics data</b>
+              <p id="anaErrorMsg" style="margin:2px 0 0;font-size:12.5px;">Could not communicate with the database. Please verify your connection.</p>
+            </div>
+          </div>
+          <button type="button" class="outline" id="anaRetryBtn" style="padding:8px 16px;font-size:12.5px;background:#fff;border-color:var(--danger-border);color:var(--danger);"><i data-lucide="refresh-cw"></i> Retry Analytics</button>
+        </div>
+
         <!-- 4 KPI SUMMARY CARDS -->
-        <div class="stats stats-4">
+        <div class="stats stats-4" id="anaKpiCards">
           <div class="stat-card">
-            <span class="stat-icon"><i data-lucide="users" class="icon-primary"></i></span>
+            <span class="stat-icon"><i data-lucide="users"></i></span>
             <b id="anaTotalRegistered">0</b>
-            <small>Total Students Registered</small>
-            <span class="stat-tag" style="font-size:11px;font-weight:700;color:var(--success);margin-top:2px;">Verified Platform Accounts</span>
+            <small>Registered Students</small>
+            <span class="stat-tag" style="color:var(--success);">Verified Accounts</span>
           </div>
           <div class="stat-card">
-            <span class="stat-icon"><i data-lucide="user-check" class="icon-primary"></i></span>
+            <span class="stat-icon"><i data-lucide="user-check"></i></span>
             <b id="anaTotalEnrolled">0</b>
             <small>Students on Your Lectures</small>
-            <span class="stat-tag" style="font-size:11px;font-weight:700;color:var(--p);margin-top:2px;">Granted Access or Active</span>
+            <span class="stat-tag" style="color:var(--p);">Active Listeners</span>
           </div>
           <div class="stat-card">
-            <span class="stat-icon"><i data-lucide="play-circle" class="icon-primary"></i></span>
+            <span class="stat-icon"><i data-lucide="play-circle"></i></span>
             <b id="anaTotalPlays">0</b>
             <small>Total Lecture Plays</small>
-            <span class="stat-tag" style="font-size:11px;font-weight:700;color:#2563eb;margin-top:2px;">Cumulative Audio Streams</span>
+            <span class="stat-tag" style="color:#1e40af;">Audio Streams</span>
           </div>
           <div class="stat-card">
-            <span class="stat-icon"><i data-lucide="book-open" class="icon-primary"></i></span>
+            <span class="stat-icon"><i data-lucide="book-open"></i></span>
             <b id="anaPublishedCount">0</b>
             <small>Published Lectures</small>
-            <span class="stat-tag" style="font-size:11px;font-weight:700;color:#059669;margin-top:2px;">Available in Student Portal</span>
+            <span class="stat-tag" style="color:var(--success);">Student Portal Access</span>
+          </div>
+        </div>
+
+        <!-- DIGITAL WELLBEING PUBLISHING CADENCE -->
+        <div class="wellbeing-card" id="anaWellbeingSection">
+          <div class="wellbeing-head">
+            <div>
+              <div style="display:flex;align-items:center;gap:10px;">
+                <h2 style="margin:0;"><i data-lucide="activity"></i> Publishing Cadence &amp; Teaching Activity</h2>
+                <span class="wellbeing-badge"><i data-lucide="sparkles" style="width:12px;height:12px;"></i> Digital Cadence</span>
+              </div>
+              <p class="muted" style="font-size:12.5px;margin:3px 0 0;">Monitor weekly teaching momentum, monthly milestone targets, and consistent publishing rhythm.</p>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <button type="button" class="outline" id="anaOpenGoalsModalBtn" style="padding:7px 14px;font-size:12px;"><i data-lucide="target"></i> Set Goals</button>
+              <span class="badge badge-published" id="anaStreakBadge"><i data-lucide="check"></i> Steady Cadence</span>
+            </div>
+          </div>
+
+          <div class="wellbeing-grid">
+            <div class="wellbeing-metrics-col">
+              <!-- This Week Tile -->
+              <div class="wellbeing-tile">
+                <div>
+                  <div class="wellbeing-tile-top">
+                    <div class="wellbeing-tile-icon"><i data-lucide="calendar"></i></div>
+                    <span class="badge" style="background:var(--bg-subtle);color:var(--text-secondary);font-size:10.5px;">Mon &ndash; Sun</span>
+                  </div>
+                  <div class="wellbeing-tile-number" id="anaPublishedWeekCount">0</div>
+                  <div class="wellbeing-tile-label">Published This Week</div>
+                  <div class="wellbeing-tile-sub" id="anaWeekDateRangeLabel">Current calendar week</div>
+                </div>
+                <div>
+                  <div class="wellbeing-progress-track">
+                    <div class="wellbeing-progress-fill" id="anaWeekProgressFill" style="width: 0%;"></div>
+                  </div>
+                  <div class="wellbeing-tile-footer" id="anaWeekFooter">
+                    <i data-lucide="trending-up" style="width:12px;height:12px;"></i>
+                    <span id="anaWeekGoalText">Target: 3 lectures / week</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- This Month Tile -->
+              <div class="wellbeing-tile">
+                <div>
+                  <div class="wellbeing-tile-top">
+                    <div class="wellbeing-tile-icon"><i data-lucide="award"></i></div>
+                    <span class="badge" id="anaMonthNameBadge" style="background:var(--warning-bg);color:var(--warning);font-size:10.5px;">This Month</span>
+                  </div>
+                  <div class="wellbeing-tile-number" id="anaPublishedMonthCount">0</div>
+                  <div class="wellbeing-tile-label">Published This Month</div>
+                  <div class="wellbeing-tile-sub" id="anaMonthDateRangeLabel">Full monthly velocity</div>
+                </div>
+                <div>
+                  <div class="wellbeing-progress-track">
+                    <div class="wellbeing-progress-fill" id="anaMonthProgressFill" style="width: 0%;"></div>
+                  </div>
+                  <div class="wellbeing-tile-footer" id="anaMonthFooter" style="color:var(--p);">
+                    <i data-lucide="check-circle-2" style="width:12px;height:12px;"></i>
+                    <span id="anaMonthSummaryText">Available to enrolled students</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Weekly Activity Bar Chart -->
+            <div class="wellbeing-chart-box">
+              <div class="wellbeing-chart-top">
+                <div>
+                  <b style="font-size:13.5px;color:var(--text);display:flex;align-items:center;gap:6px;">
+                    <i data-lucide="bar-chart" style="width:15px;height:15px;color:var(--p);"></i> Weekly Activity Distribution
+                  </b>
+                  <p class="muted" style="font-size:11.5px;margin:2px 0 0;">Daily publication volume across the week</p>
+                </div>
+                <div class="wellbeing-nav-controls">
+                  <button type="button" class="wellbeing-nav-btn" id="anaChartPrevWeekBtn" title="Previous Week">&lsaquo;</button>
+                  <span id="anaChartWeekRangeLabel" style="font-size:11.5px;font-weight:700;color:var(--text);padding:0 4px;">This Week</span>
+                  <button type="button" class="wellbeing-nav-btn" id="anaChartNextWeekBtn" title="Next Week">&rsaquo;</button>
+                  <button type="button" class="outline" id="anaChartTodayWeekBtn" style="padding:4px 8px;font-size:11px;margin-left:4px;">Current</button>
+                </div>
+              </div>
+
+              <!-- 7 Day Bars -->
+              <div class="wellbeing-chart-bars" id="anaWeekBarsContainer"></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:11px;color:var(--muted);flex-wrap:wrap;gap:6px;">
+                <span>Click any day bar to inspect its lectures below</span>
+                <span id="anaChartWeekSummaryHint" style="font-weight:600;color:var(--p);">0 lectures</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- INTERACTIVE CALENDAR & DATE INSPECTOR -->
+        <div class="ana-cal-section" id="anaCalendarSection">
+          <!-- Calendar Grid Card -->
+          <div class="ana-cal-card">
+            <div class="ana-cal-header">
+              <div class="ana-cal-title-wrap">
+                <button type="button" class="ana-cal-nav-btn" id="calPrevMonthBtn" title="Previous Month">&lsaquo;</button>
+                <div class="ana-cal-month-title" id="calMonthYearTitle">Loading Calendar...</div>
+                <button type="button" class="ana-cal-nav-btn" id="calNextMonthBtn" title="Next Month">&rsaquo;</button>
+              </div>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <button type="button" class="outline" id="calTodayBtn" style="padding:6px 12px;font-size:12px;"><i data-lucide="calendar"></i> Today</button>
+                <button type="button" class="outline hidden" id="calClearFilterBtn" style="padding:6px 10px;font-size:12px;color:var(--warning);border-color:var(--warning-border);"><i data-lucide="x"></i> Clear</button>
+              </div>
+            </div>
+
+            <div class="ana-cal-weekdays">
+              <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+            </div>
+
+            <div class="ana-cal-grid" id="anaCalendarGrid"></div>
+
+            <div class="ana-cal-legend">
+              <div class="ana-cal-legend-item">
+                <span style="width:7px;height:7px;border-radius:50%;background:var(--p);display:inline-block;"></span>
+                <span>Published Lecture</span>
+              </div>
+              <div class="ana-cal-legend-item">
+                <span style="width:10px;height:10px;border:1.5px solid var(--p);border-radius:3px;display:inline-block;"></span>
+                <span>Today</span>
+              </div>
+              <div class="ana-cal-legend-item">
+                <span style="background:var(--p);color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;">Active</span>
+                <span>Selected</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Selected Date Details Inspector Card -->
+          <div class="ana-cal-detail-card" id="anaCalDetailCard">
+            <div class="cardhead" style="margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <h2 style="margin:0;font-size:18px;"><i data-lucide="calendar"></i> Selected Date Lectures</h2>
+                  <span class="badge" id="calSelectedDateCountBadge">0 Lectures</span>
+                </div>
+                <p class="muted" id="calSelectedDateSubtitle" style="font-size:12px;margin:3px 0 0;">Select a date from the calendar</p>
+              </div>
+              <button type="button" class="primary" data-page="facultyUpload" style="padding:7px 12px;font-size:12px;"><i data-lucide="plus"></i> New Lecture</button>
+            </div>
+            <div class="ana-cal-detail-list" id="anaCalDetailList"></div>
           </div>
         </div>
 
@@ -502,10 +767,10 @@
         <div class="card" style="margin-top:24px;">
           <div class="cardhead" style="flex-wrap:wrap;gap:12px;margin-bottom:14px;">
             <div style="display:flex;align-items:center;gap:10px;">
-              <h2 style="margin:0;">🕒 Recent Student Lecture Access</h2>
-              <span class="badge" style="background:#e0f2fe;color:#0369a1;font-weight:700;">🟢 Live Activity Feed</span>
+              <h2 style="margin:0;"><i data-lucide="clock"></i> Recent Student Access Activity</h2>
+              <span class="badge" style="background:var(--info-bg);color:var(--info);font-weight:700;"><i data-lucide="activity"></i> Live Stream</span>
             </div>
-            <input id="anaActivitySearchInput" type="text" class="meta-input" placeholder="🔍 Filter by student name, email, or lecture..." style="max-width:320px;margin-top:0;font-size:12.5px;padding:8px 12px;">
+            <input id="anaActivitySearchInput" type="text" class="meta-input" placeholder="Search by student name, email, or lecture..." style="max-width:320px;margin-top:0;font-size:12.5px;padding:8px 12px;">
           </div>
           <div class="table-wrap">
             <table>
@@ -515,7 +780,7 @@
                   <th>Lecture Accessed</th>
                   <th>Activity Action</th>
                   <th>When Accessed</th>
-                  <th>Access Verification</th>
+                  <th>Verification</th>
                 </tr>
               </thead>
               <tbody id="anaRecentActivityRows">
@@ -528,8 +793,11 @@
         <!-- LECTURE ENGAGEMENT BREAKDOWN TABLE -->
         <div class="card" style="margin-top:24px;">
           <div class="cardhead" style="flex-wrap:wrap;gap:12px;margin-bottom:14px;">
-            <h2 style="margin:0;">📚 Lecture Access &amp; Engagement Breakdown</h2>
-            <span class="muted" style="font-size:12.5px;" id="anaLectureCountLabel">Showing all faculty lectures</span>
+            <h2 style="margin:0;"><i data-lucide="layers"></i> Lecture Engagement Breakdown</h2>
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span class="muted" style="font-size:12.5px;" id="anaLectureCountLabel">Showing all faculty lectures</span>
+              <button type="button" class="outline hidden" id="anaTableClearFilterBtn" style="padding:4px 10px;font-size:11px;color:var(--warning);">Show All</button>
+            </div>
           </div>
           <div class="table-wrap">
             <table>
@@ -538,396 +806,392 @@
                   <th>Lecture Title</th>
                   <th>Subject / Box</th>
                   <th>Status</th>
-                  <th>👥 Student Access Scope</th>
-                  <th>📊 Unique Listeners</th>
-                  <th>▶️ Total Plays</th>
-                  <th>⏱ Avg Time</th>
+                  <th>Student Access Scope</th>
+                  <th>Unique Listeners</th>
+                  <th>Total Plays</th>
+                  <th>Avg Listening Time</th>
                 </tr>
               </thead>
               <tbody id="facultyAnalyticsRows"></tbody>
             </table>
           </div>
         </div>
+
+        <!-- GOALS CONFIGURATION MODAL -->
+        <div id="anaGoalsModal" class="box-modal-backdrop hidden">
+          <div class="box-modal" style="max-width:440px;">
+            <div class="box-modal-header">
+              <h2><i data-lucide="target"></i> Publishing Goals</h2>
+              <button type="button" class="box-modal-close" id="anaCloseGoalsModalBtn">&times;</button>
+            </div>
+            <p class="muted" style="font-size:12.5px;margin-top:0;">Configure weekly and monthly lecture targets. Goals update your progress cadences automatically.</p>
+            <form id="anaGoalsForm" style="display:flex;flex-direction:column;gap:14px;margin-top:14px;">
+              <label class="meta-label">
+                Weekly Target (Lectures per Week)
+                <input type="number" min="1" max="50" id="anaInputWeeklyGoal" class="meta-input" value="3" required>
+              </label>
+              <label class="meta-label">
+                Monthly Target (Lectures per Month)
+                <input type="number" min="1" max="200" id="anaInputMonthlyGoal" class="meta-input" value="6" required>
+              </label>
+              <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+                <button type="button" class="outline" id="anaCancelGoalsModalBtn">Cancel</button>
+                <button type="submit" class="primary" id="anaSaveGoalsBtn"><i data-lucide="save"></i> Save Goals</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- RESCHEDULE LECTURE DATE MODAL -->
+        <div id="anaRescheduleModal" class="box-modal-backdrop hidden">
+          <div class="box-modal" style="max-width:440px;">
+            <div class="box-modal-header">
+              <h2><i data-lucide="calendar"></i> Change Lecture Date</h2>
+              <button type="button" class="box-modal-close" id="anaCloseRescheduleModalBtn">&times;</button>
+            </div>
+            <p class="muted" style="font-size:12.5px;margin-top:0;" id="anaRescheduleLectureTitle">Updating lecture publication date</p>
+            <form id="anaRescheduleForm" style="display:flex;flex-direction:column;gap:14px;margin-top:14px;">
+              <input type="hidden" id="anaRescheduleLectureId" value="">
+              <label class="meta-label">
+                New Publication / Scheduled Date (YYYY-MM-DD)
+                <input type="date" id="anaRescheduleDateInput" class="meta-input" required>
+              </label>
+              <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px;">
+                <button type="button" class="outline" id="anaCancelRescheduleBtn">Cancel</button>
+                <button type="submit" class="primary"><i data-lucide="save"></i> Update Date</button>
+              </div>
+            </form>
+          </div>
+        </div>
       </section>
 
-      <!-- 6. FACULTY PROFILE -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 6. FACULTY PROFILE                                                  -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
       <section id="facultyProfile" class="page">
-        <div class="crumb">Faculty Dashboard &rsaquo; Faculty Profile</div>
-        <h1>👤 Faculty Profile</h1>
-        <p class="muted">View and manage your academic profile, department credentials, and security settings.</p>
+        <div class="crumb">Faculty Dashboard &rsaquo; <span>Faculty Profile</span></div>
+        <div class="detailhead">
+          <div>
+            <h1><i data-lucide="user" class="header-icon"></i> Faculty Profile</h1>
+            <p class="muted">Manage your academic credentials, department affiliation, and security settings.</p>
+          </div>
+        </div>
 
-        <div class="card" style="max-width:740px;">
+        <div class="card" style="max-width:760px;">
           <div class="faculty-profile-header">
-            <div class="faculty-avatar-box" id="facAvatarDisplay">👨‍🏫</div>
+            <div class="faculty-avatar-box" id="facAvatarDisplay"><i data-lucide="user"></i></div>
             <div style="flex:1;">
-              <h2 id="facProfileDisplayName" style="margin:0 0 4px;font-size:21px;">Dr. Ananya Sharma</h2>
+              <h2 id="facProfileDisplayName" style="margin:0 0 4px;font-size:22px;">Dr. Ananya Sharma</h2>
               <p class="muted" id="facProfileDisplayDept" style="margin:0;">Department of Computer Engineering &amp; AI</p>
               <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
                 <span class="badge" id="facProfileDisplayId">ID: FAC-2026-104</span>
-                <span class="badge" style="background:#f0eaff;color:var(--p);">👨‍🏫 Verified Faculty</span>
+                <span class="badge badge-ready"><i data-lucide="shield-check"></i> Verified Faculty</span>
               </div>
             </div>
             <label class="outline" for="facAvatarFileInput" style="cursor:pointer;font-size:12.5px;padding:8px 14px;">
-              📷 Change Photo
-              <input id="facAvatarFileInput" type="file" accept="image/*" style="display:none;">
+              <i data-lucide="upload"></i> Change Avatar
             </label>
+            <input id="facAvatarFileInput" type="file" accept="image/*" style="display:none;">
           </div>
-
-          <div class="form-grid-2" style="margin-top:22px;">
-            <label class="meta-label">
-              Full Name
-              <input id="facProfNameInput" type="text" class="meta-input" value="Dr. Ananya Sharma">
-            </label>
-            <label class="meta-label">
-              Faculty ID
-              <input id="facProfIdInput" type="text" class="meta-input" value="FAC-2026-104">
-            </label>
-            <label class="meta-label">
-              Faculty Email
-              <input id="facProfEmailInput" type="email" class="meta-input" value="faculty@vaani.edu">
-            </label>
-            <label class="meta-label">
-              Department
-              <input id="facProfDeptInput" type="text" class="meta-input" value="Department of Computer Engineering &amp; AI">
-            </label>
-          </div>
-
-          <div id="facPasswordBox" class="hidden" style="margin-top:18px;padding-top:16px;border-top:1px dashed var(--border);">
-            <h3 style="margin:0 0 12px;font-size:15px;">🔐 Change Password</h3>
+          <div style="margin-top:22px;">
             <div class="form-grid-2">
               <label class="meta-label">
-                Current Password
-                <input id="facCurrentPassInput" type="password" class="meta-input" placeholder="Enter current password">
+                Full Name
+                <input id="facProfNameInput" type="text" class="meta-input">
               </label>
               <label class="meta-label">
-                New Password
-                <input id="facNewPassInput" type="password" class="meta-input" placeholder="Enter new password (min 6 chars)">
+                Faculty ID
+                <input id="facProfIdInput" type="text" class="meta-input">
+              </label>
+              <label class="meta-label">
+                Email Address
+                <input id="facProfEmailInput" type="email" class="meta-input">
+              </label>
+              <label class="meta-label">
+                Department
+                <input id="facProfDeptInput" type="text" class="meta-input">
               </label>
             </div>
+            <button class="primary" id="facSaveProfileBtn" style="margin-top:18px;"><i data-lucide="save"></i> Save Profile</button>
           </div>
 
-          <div style="display:flex;gap:10px;margin-top:22px;flex-wrap:wrap;">
-            <button type="button" class="primary" id="facSaveProfileBtn">✏ Save Profile Changes</button>
-            <button type="button" class="outline" id="facTogglePassBtn">🔐 Change Password</button>
-            <button type="button" class="outline" data-page="settings">⚙ Settings</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- ═══════════════════════════════════════════════════════════════════ -->
-      <!-- 🎓 STUDENT INTERFACE SECTIONS (ALL EXISTING FEATURES PRESERVED)     -->
-      <!-- ═══════════════════════════════════════════════════════════════════ -->
-
-      <!-- DASHBOARD -->
-      <section id="dashboard" class="page active">
-        <p class="eyebrow">Welcome back!</p>
-        <h1>Student Dashboard</h1>
-        <p class="muted">Listen to faculty-published lectures and read verified AI transcripts &amp; summaries.</p>
-        <div class="stats">
-          <div><b id="statSummaries">0</b><small>Published Lectures &amp; Summaries</small></div>
-          <div><b id="statAudio">0.0 hrs</b><small>Audio Available</small></div>
-        </div>
-        <div class="card">
-          <div class="cardhead" style="flex-wrap:wrap;gap:10px;">
-            <h2>📚 Published Lectures</h2>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <input id="studentDashSearch" type="text" class="meta-input" placeholder="🔎 Search lectures by title, subject, professor..." style="width:260px;margin-top:0;padding:8px 12px;">
-              <button class="outline" data-page="recordings">Browse All</button>
+          <div style="margin-top:24px;padding-top:18px;border-top:1px solid var(--border);">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <div>
+                <h3 style="margin:0;font-size:15px;">Security &amp; Password</h3>
+                <p class="muted" style="margin:2px 0 0;font-size:12.5px;">Update your password to keep your academic workspace secure.</p>
+              </div>
+              <button type="button" class="outline" id="facTogglePassBtn" style="font-size:12.5px;"><i data-lucide="lock"></i> Change Password</button>
             </div>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Subject / Lecture</th>
-                  <th>Professor</th>
-                  <th>Duration</th>
-                  <th>Created At</th>
-                  <th>Status</th>
-                  <th>Audio</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="rows"></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- DETAIL VIEW -->
-      <section id="detail" class="page">
-        <div class="crumb">Dashboard &rsaquo; Lecture Details</div>
-        <div class="detailhead">
-          <div>
-            <h1 id="detailTitle">Lecture - AI and ML Basics</h1>
-            <p class="muted" id="detailMeta">Processed by Vaani AI</p>
-          </div>
-          <button class="primary" id="download">Download Audio</button>
-        </div>
-
-        <div class="card" style="margin: 18px 0 10px; padding: 16px 20px; display: flex; align-items: center; gap: 15px;">
-          <span style="font-weight: 700; color: var(--p); white-space: nowrap; font-size: 14px;">Audio Playback:</span>
-          <audio id="detailAudioPlayer" controls style="width: 100%; height: 40px; outline: none;"></audio>
-        </div>
-
-        <div class="tabs detailtabs">
-          <button class="tab active" data-detail="transcript">Transcript</button>
-          <button class="tab" data-detail="summary">Summary</button>
-          <button class="tab" data-detail="details">Details</button>
-        </div>
-
-        <div id="transcript" class="card detailview">
-          <h2>Transcript</h2>
-          <div id="transcriptText"></div>
-        </div>
-
-        <div id="summary" class="summary hidden">
-          <div class="card">
-            <h2>AI Summary</h2>
-            <div id="summaryText" style="white-space: pre-wrap; font-family: inherit; line-height: 1.6;"></div>
-          </div>
-          <div class="card">
-            <h2>Quick Actions</h2>
-            <p class="muted">Copy summary for study notes or revision.</p>
-            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top: 15px;">
-              <button class="primary" id="copy">Copy Summary</button>
-              <button class="outline" data-page="storageBoxes">Open Storage Box</button>
-              <button class="outline" data-page="recordings">Browse All Lectures</button>
-            </div>
-          </div>
-        </div>
-
-        <div id="details" class="card hidden detailview">
-          <h2>File Details</h2>
-          <p>Duration <b id="detailDuration">00:00</b></p>
-          <p>Lecture <b id="detailLecture">-</b></p>
-          <p>Professor <b id="detailProfessor">-</b></p>
-          <p>Created <b id="detailCreated">Just now</b></p>
-          <p>Status <b class="badge" id="detailStatus">Completed</b></p>
-        </div>
-      </section>
-
-      <!-- MY RECORDINGS / BROWSE LECTURES -->
-      <section id="recordings" class="page">
-        <div class="detailhead">
-          <div>
-            <h1>📚 Browse Lectures</h1>
-            <p class="muted">Explore all published lectures, listen to recordings, and study AI transcripts &amp; summaries.</p>
-          </div>
-          <button class="outline" data-page="storageBoxes">📦 Recording Library</button>
-        </div>
-        <div class="card">
-          <div class="cardhead" style="margin-bottom:14px;flex-wrap:wrap;gap:10px;">
-            <input id="studentBrowseSearch" type="text" class="meta-input" placeholder="🔎 Search lectures by title, subject, or professor..." style="max-width:340px;margin-top:0;">
-            <select id="studentSubjectFilter" class="meta-input" style="max-width:220px;margin-top:0;">
-              <option value="ALL">All Subjects &amp; Courses</option>
-              <option value="Artificial Intelligence">Artificial Intelligence &amp; ML</option>
-              <option value="Data Structures">Data Structures</option>
-              <option value="Innovation Lab">Innovation Lab</option>
-              <option value="Deep Learning">Deep Learning</option>
-            </select>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Title</th>
-                  <th>Subject / Lecture</th>
-                  <th>Professor</th>
-                  <th>Duration</th>
-                  <th>Date</th>
-                  <th>Status</th>
-                  <th>Audio</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody id="allrows"></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <!-- ═══════════════════════════════════════════════════════════════════ -->
-      <!-- 📦 RECORDING STORAGE BOX SYSTEM (DYNAMIC BOXES & RECORDINGS)       -->
-      <!-- ═══════════════════════════════════════════════════════════════════ -->
-
-      <!-- STORAGE BOX LIBRARY -->
-      <section id="storageBoxes" class="page">
-        <div class="crumb" id="storageBoxesCrumb">Dashboard &rsaquo; Recording Storage Boxes</div>
-        <div class="detailhead" style="flex-wrap:wrap;gap:12px;">
-          <div>
-            <h1>📦 Recording Library</h1>
-            <p class="muted">Digital storage boxes for organizing, browsing, and accessing lecture recordings dynamically.</p>
-          </div>
-          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <button class="primary" id="createNewBoxBtn" type="button">+ Create Storage Box</button>
-          </div>
-        </div>
-
-        <div class="card" style="margin-top:14px;padding:16px 20px;">
-          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between;">
-            <input id="storageBoxSearchInput" type="text" class="meta-input" placeholder="🔎 Search recording boxes..." style="max-width:380px;margin-top:0;">
-            <span class="muted" id="storageBoxesCountLabel" style="font-size:13px;font-weight:600;">Showing all boxes</span>
-          </div>
-        </div>
-
-        <div id="storageBoxesGrid" class="storage-boxes-grid"></div>
-        <div id="storageBoxesEmptyState" class="empty hidden" style="margin-top:20px;">
-          <span style="font-size:38px;">📦</span>
-          <h2>No Storage Boxes Found</h2>
-          <p class="muted">Create a new storage box with any custom name to organize lecture recordings.</p>
-          <button class="primary" id="emptyCreateBoxBtn" type="button" style="margin-top:10px;">+ Create Storage Box</button>
-        </div>
-      </section>
-
-      <!-- STORAGE BOX DETAIL VIEW (RECORDINGS INSIDE A BOX) -->
-      <section id="storageBoxDetail" class="page">
-        <div class="crumb">
-          <a href="#" id="boxDetailBackCrumb" style="color:var(--p);text-decoration:none;font-weight:600;">&larr; Recording Library</a>
-          &rsaquo; <span id="boxDetailCrumbName">Storage Box</span>
-        </div>
-
-        <div class="box-detail-banner">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;">
-            <div style="display:flex;align-items:flex-start;gap:14px;min-width:0;flex:1;">
-              <span class="box-emoji" style="font-size:32px;padding:12px;">📦</span>
-              <div style="min-width:0;">
-                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                  <h1 id="boxDetailName" style="margin:0;font-size:24px;">Storage Box Name</h1>
-                  <span class="badge" id="boxDetailCountBadge">0 Recordings</span>
-                </div>
-                <p class="muted" id="boxDetailDesc" style="margin:6px 0 10px;font-size:13.5px;line-height:1.5;">Box description here...</p>
-                <div style="display:flex;gap:12px;font-size:12px;color:var(--muted);flex-wrap:wrap;">
-                  <span>👨‍🏫 Created By: <b id="boxDetailCreator" style="color:var(--text);">-</b></span>
-                  <span>📅 Last Updated: <b id="boxDetailUpdated" style="color:var(--text);">-</b></span>
-                </div>
+            <div id="facPasswordBox" class="hidden" style="margin-top:14px;">
+              <div class="form-grid-2">
+                <label class="meta-label">
+                  Current Password
+                  <input id="facCurrentPassInput" type="password" class="meta-input" placeholder="Current password">
+                </label>
+                <label class="meta-label">
+                  New Password
+                  <input id="facNewPassInput" type="password" class="meta-input" placeholder="Min. 6 characters">
+                </label>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
 
-            <!-- Box Actions for Faculty -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 7. SETTINGS PAGE (SHARED)                                           -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <section id="settings" class="page">
+        <div class="crumb">Dashboard &rsaquo; <span>Settings</span></div>
+        <div class="detailhead">
+          <div>
+            <h1><i data-lucide="settings" class="header-icon"></i> Settings</h1>
+            <p class="muted">Manage your profile preferences, local timezone, and backend AI configurations.</p>
+          </div>
+        </div>
+
+        <div class="card" style="max-width:760px;">
+          <h2><i data-lucide="user"></i> Profile &amp; Preferences</h2>
+          <div class="form-grid-2" style="margin-top:16px;">
+            <label class="meta-label">
+              Display Name
+              <input id="settingsName" type="text" class="meta-input">
+            </label>
+            <label class="meta-label">
+              AI Summary Detail Level
+              <select class="meta-input">
+                <option value="Short">Short (Concise Core Notes)</option>
+                <option value="Medium" selected>Medium (Standard Academic Overview)</option>
+                <option value="Detailed">Detailed (Comprehensive Deep Dive)</option>
+              </select>
+            </label>
+          </div>
+          <label class="meta-label" style="margin-top:14px;">
+            Local Timezone
+            <input id="settingsTimezone" type="text" class="meta-input" readonly>
+          </label>
+          <button class="primary" id="save" style="margin-top:18px;"><i data-lucide="save"></i> Save Settings</button>
+        </div>
+
+        <div class="card" style="margin-top:20px;max-width:760px;" id="facultySettingsOnly">
+          <h2><i data-lucide="cpu"></i> AI &amp; Backend Configuration</h2>
+          <div style="margin-top:14px;padding:16px;border-radius:10px;background:var(--bg);border:1px solid var(--border);">
+            <div id="geminiStatusBadge" style="display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;">Loading Gemini Status...</div>
+            <div id="geminiKeyMaskedNote" style="margin-top:8px;font-size:13px;"></div>
+            <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">
+              <div style="position:relative;flex:1;min-width:220px;">
+                <input id="geminiApiKeyInput" type="password" class="meta-input" placeholder="Paste your Google Gemini API key..." style="margin-top:0;padding-right:34px;">
+                <button type="button" id="toggleGeminiKeyVisibility" style="position:absolute;right:8px;top:8px;border:none;background:none;cursor:pointer;color:var(--muted);"><i data-lucide="eye" style="width:16px;height:16px;"></i></button>
+              </div>
+              <button type="button" class="primary" id="saveGeminiKeyBtn" style="padding:8px 16px;font-size:13px;"><i data-lucide="save"></i> Save Key</button>
+              <button type="button" class="outline" id="testGeminiKeyBtn" style="padding:8px 16px;font-size:13px;"><i data-lucide="zap"></i> Test</button>
+              <button type="button" class="outline" id="clearGeminiKeyBtn" style="padding:8px 16px;font-size:13px;color:var(--danger);border-color:var(--danger-border);"><i data-lucide="trash-2"></i> Clear</button>
+            </div>
+            <div style="margin-top:12px;font-size:12px;color:var(--muted);display:flex;gap:16px;">
+              <span>Gemini: <b id="diagGeminiStatus">○ Standby</b></span>
+              <span>Whisper Python: <b id="diagWhisperStatus">○ Standby</b></span>
+            </div>
+          </div>
+
+          <h3 style="margin:22px 0 6px;font-size:15px;display:flex;align-items:center;gap:6px;">
+            <i data-lucide="mail" style="width:16px;height:16px;color:var(--p)"></i> SMTP Email Delivery
+          </h3>
+          <p id="smtpStatusText" class="muted" style="font-size:12.5px;line-height:1.5;">Checking SMTP status...</p>
+          <div class="form-grid-2" style="margin-top:12px;">
+            <label class="meta-label">
+              SMTP Host
+              <input id="smtpHostInput" type="text" class="meta-input" placeholder="smtp.gmail.com">
+            </label>
+            <label class="meta-label">
+              SMTP Port
+              <input id="smtpPortInput" type="number" class="meta-input" placeholder="587">
+            </label>
+            <label class="meta-label">
+              SMTP Username / Email
+              <input id="smtpUserInput" type="text" class="meta-input" placeholder="your-email@gmail.com">
+            </label>
+            <label class="meta-label">
+              Test Recipient Email
+              <input id="smtpTestRecipient" type="email" class="meta-input" placeholder="recipient@vaani.edu">
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 8. BROWSE LECTURES (STUDENT)                                        -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <section id="recordings" class="page">
+        <div class="crumb">Dashboard &rsaquo; <span>Browse Lectures</span></div>
+        <div class="detailhead">
+          <div>
+            <h1><i data-lucide="library" class="header-icon"></i> Browse Lectures</h1>
+            <p class="muted">Explore published curriculum recordings, transcripts, and AI-generated notes.</p>
+          </div>
+          <select id="studentSubjectFilter" class="meta-input" style="max-width:260px;margin-top:0;">
+            <option value="ALL">All Subjects &amp; Boxes</option>
+          </select>
+        </div>
+        <input id="studentBrowseSearch" type="text" class="meta-input" placeholder="Search by lecture title, professor, or subject..." style="margin-bottom:16px;">
+        <div class="table-wrap card" style="margin-top:0;">
+          <table>
+            <thead>
+              <tr>
+                <th>Lecture Title</th>
+                <th>Subject / Box</th>
+                <th>Professor</th>
+                <th>Duration</th>
+                <th>Published Date</th>
+                <th>Status</th>
+                <th>Audio Stream</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="allrows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 9. STORAGE BOXES (COLLECTIONS)                                      -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <section id="storageBoxes" class="page">
+        <div class="crumb">Dashboard &rsaquo; <span>Storage Boxes</span></div>
+        <div class="detailhead">
+          <div>
+            <h1><i data-lucide="archive" class="header-icon"></i> Storage Boxes</h1>
+            <p class="muted">Curated thematic collections, academic modules, and grouped course recordings.</p>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span class="muted" id="storageBoxesCountLabel" style="font-size:13px;font-weight:600;">0 storage boxes</span>
+            <button type="button" class="primary" id="createNewBoxBtn" style="font-size:13px;padding:9px 18px;"><i data-lucide="plus"></i> New Storage Box</button>
+          </div>
+        </div>
+
+        <input id="storageBoxSearchInput" type="text" class="meta-input" placeholder="Search storage boxes by title, description, or professor..." style="margin-bottom:18px;">
+
+        <!-- Storage Boxes Grid -->
+        <div id="storageBoxesGrid" class="storage-boxes-grid"></div>
+
+        <!-- Empty State -->
+        <div id="storageBoxesEmptyState" class="card empty-state-box hidden">
+          <div class="ana-empty-icon"><i data-lucide="archive"></i></div>
+          <h3 class="ana-empty-title">No Storage Boxes Found</h3>
+          <p class="ana-empty-desc">Create custom storage boxes to organize your course lectures into clean, modular collections.</p>
+          <button type="button" class="primary" id="emptyCreateBoxBtn"><i data-lucide="plus"></i> Create First Storage Box</button>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 10. STORAGE BOX DETAIL VIEW                                         -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <section id="storageBoxDetail" class="page">
+        <div class="crumb" style="cursor:pointer;" id="boxDetailBackCrumb">
+          &lsaquo; Back to Storage Boxes &rsaquo; <span id="boxDetailCrumbName">Box Details</span>
+        </div>
+        <div class="card box-detail-banner" style="margin-top:14px;padding:24px;">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;">
+            <div>
+              <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <h1 id="boxDetailName" style="margin:0;font-size:26px;">Box Name</h1>
+                <span class="badge" id="boxDetailCountBadge"><i data-lucide="archive"></i> 0 Recordings</span>
+              </div>
+              <p id="boxDetailDesc" class="muted" style="margin:8px 0 0;font-size:13.5px;max-width:700px;line-height:1.55;">Box description</p>
+              <div style="display:flex;gap:18px;align-items:center;margin-top:12px;font-size:12.5px;color:var(--muted);flex-wrap:wrap;">
+                <span>Created by: <b id="boxDetailCreator" style="color:var(--text);">Faculty</b></span>
+                <span>Last updated: <b id="boxDetailUpdated" style="color:var(--text);">-</b></span>
+              </div>
+            </div>
             <div id="boxDetailFacultyActions" style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="primary" id="boxAddRecordingBtn" type="button" style="padding:9px 16px;font-size:13px;">+ Add Recording</button>
-              <button class="outline" id="boxEditDetailsBtn" type="button" style="padding:9px 14px;font-size:13px;">✏ Edit Box</button>
-              <button class="outline" id="boxDeleteBtn" type="button" style="padding:9px 14px;font-size:13px;color:#d32f2f;border-color:#ffcdd2;">🗑 Delete Box</button>
+              <button type="button" class="outline" id="boxEditDetailsBtn"><i data-lucide="pencil"></i> Edit Box</button>
+              <button type="button" class="outline" id="boxDeleteBtn" style="color:var(--danger);border-color:var(--danger-border);"><i data-lucide="trash-2"></i> Delete Box</button>
+              <button type="button" class="primary" id="boxAddRecordingBtn"><i data-lucide="plus"></i> Add Lecture</button>
             </div>
           </div>
         </div>
 
-        <div class="card">
-          <div class="cardhead" style="margin-bottom:14px;flex-wrap:wrap;gap:10px;">
-            <div>
-              <h2>🎙️ Recordings in this Box</h2>
-              <p class="muted" style="font-size:12.5px;margin-top:2px;">All lectures organized under this storage box.</p>
-            </div>
-            <input id="boxRecordingsSearchInput" type="text" class="meta-input" placeholder="🔎 Search recordings in this box..." style="max-width:320px;margin-top:0;">
+        <div class="card" style="margin-top:20px;">
+          <div class="cardhead" style="flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+            <h2 style="margin:0;"><i data-lucide="book-open"></i> Lectures in this Box</h2>
+            <input id="boxRecordingsSearchInput" type="text" class="meta-input" placeholder="Search lectures in this box..." style="max-width:280px;margin-top:0;">
           </div>
-
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Title</th>
-                  <th>Date</th>
+                  <th>Lecture Title</th>
+                  <th>Subject</th>
+                  <th>Professor</th>
                   <th>Duration</th>
+                  <th>Date</th>
                   <th>Status</th>
-                  <th>Audio Player</th>
+                  <th>Audio</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody id="boxRecordingsRows"></tbody>
             </table>
           </div>
-          <div id="boxRecordingsEmpty" class="empty hidden" style="padding:40px 20px;border:none;">
-            <span style="font-size:32px;">🎙️</span>
-            <h3>No Recordings in this Box Yet</h3>
-            <p class="muted">Upload or assign a lecture recording to store it inside this box.</p>
-            <button class="primary" id="boxEmptyAddRecBtn" type="button" style="margin-top:8px;">+ Create Recording to this Box</button>
+          <div id="boxRecordingsEmpty" class="hidden" style="text-align:center;padding:36px 16px;">
+            <p class="muted">No lectures assigned to this storage box yet.</p>
+            <button type="button" class="primary" id="boxEmptyAddRecBtn" style="margin-top:8px;"><i data-lucide="plus"></i> Add First Lecture</button>
           </div>
         </div>
       </section>
 
-      <!-- SUMMARIES -->
-      <section id="summaries" class="page empty">
-        <h1>AI Summaries</h1>
-        <p>All your generated summaries will appear here.</p>
-        <button class="primary" data-page="dashboard">Back to Dashboard</button>
-      </section>
-
-      <!-- SETTINGS -->
-      <section id="settings" class="page">
-        <div class="card settings" style="max-width:850px;">
-          <h1>Settings</h1>
-          <label>Display Name<input id="settingsName" value="User"></label>
-          <label>Default Summary Length
-            <select id="settingsSummaryMode">
-              <option>Medium</option>
-              <option>Short</option>
-              <option>Detailed</option>
-            </select>
-          </label>
-          <label>System Timezone
-            <input id="settingsTimezone" readonly style="background:#f8f9fd;color:#4920c5;font-weight:500;cursor:default;" title="All recording dates and timestamps are automatically synchronized to your local timezone">
-          </label>
-          <button class="primary" id="save">Save Preferences</button>
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <!-- 11. DETAIL VIEW (STUDENT / FACULTY)                                 -->
+      <!-- ═══════════════════════════════════════════════════════════════════ -->
+      <section id="detail" class="page">
+        <div class="crumb">Dashboard &rsaquo; <span>Lecture Detail</span></div>
+        <div class="detailhead">
+          <h1 id="detailTitle">Loading Lecture...</h1>
+          <div style="display:flex;gap:10px;">
+            <button class="outline" id="download"><i data-lucide="download"></i> Download Audio</button>
+            <button class="primary" id="copy"><i data-lucide="copy"></i> Copy Summary</button>
+          </div>
         </div>
-
-        <!-- GEMINI AI & SPEECH-TO-TEXT CONFIGURATION -->
-        <div class="card settings" style="max-width:850px; margin-top:22px;">
-          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
-            <div style="display:flex; align-items:center; gap:10px;">
-              <span style="font-size:28px; line-height:1;">🤖</span>
+        <p class="muted" id="detailMeta" style="margin-top:-10px;margin-bottom:18px;">Loading metadata...</p>
+        <div class="card" id="detailAudioCard" style="display:none;align-items:center;gap:18px;flex-wrap:wrap;padding:18px 22px;">
+          <span style="font-weight:700;color:var(--p);font-size:13.5px;display:flex;align-items:center;gap:6px;">
+            <i data-lucide="headphones"></i> Audio Playback:
+          </span>
+          <audio id="detailAudioPlayer" controls style="flex:1;min-width:240px;height:40px;outline:none;border-radius:8px;"></audio>
+        </div>
+        <div class="card">
+          <div class="detail-tabs">
+            <button data-detail="transcript" class="active"><i data-lucide="file-text"></i> Transcript</button>
+            <button data-detail="summary"><i data-lucide="sparkles"></i> AI Summary</button>
+            <button data-detail="details"><i data-lucide="info"></i> Lecture Details</button>
+          </div>
+          <div id="transcript" class="detail-content">
+            <div id="transcriptText" style="white-space:pre-wrap;line-height:1.7;font-size:14px;"></div>
+          </div>
+          <div id="summary" class="detail-content hidden">
+            <div id="summaryText" style="white-space:pre-wrap;line-height:1.7;font-size:14px;"></div>
+          </div>
+          <div id="details" class="detail-content hidden">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;padding:8px 0;">
               <div>
-                <h2 style="margin:0; font-size:18px;">Google Gemini AI &amp; Transcription</h2>
-                <small class="muted">Powers verbatim lecture speech-to-text and grounded academic summaries</small>
+                <span class="meta-label">Duration</span>
+                <b id="detailDuration" style="font-family:var(--font-mono);font-size:16px;">-</b>
               </div>
-            </div>
-            <div id="geminiStatusBadge" style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:20px; font-weight:700; font-size:12.5px; background:#fff4e5; color:#b45309; border:1px solid #fed7aa;">
-              <span>▲</span> Checking Gemini API Key...
-            </div>
-          </div>
-
-          <div style="background:#faf9fe; border:1px solid var(--border); border-radius:12px; padding:18px; margin-top:14px;">
-            <label class="meta-label" style="margin-bottom:6px;">
-              Gemini API Key
-              <span style="font-weight:normal; color:var(--muted); font-size:12px;">(Stored securely on your server)</span>
-            </label>
-            <div style="display:flex; gap:10px; align-items:center;">
-              <input id="geminiApiKeyInput" type="password" class="meta-input" placeholder="AIzaSy... (Paste your Google Gemini API key)" autocomplete="off" style="margin-top:0; font-family:monospace; letter-spacing:0.5px;">
-              <button type="button" class="outline" id="toggleGeminiKeyVisibility" title="Toggle visibility" style="padding:10px 14px; flex-shrink:0;">👁️</button>
-            </div>
-            <div id="geminiKeyMaskedNote" style="font-size:12px; color:var(--muted); margin-top:6px; min-height:18px;"></div>
-
-            <div style="display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; align-items:center;">
-              <button type="button" class="primary" id="saveGeminiKeyBtn">💾 Test &amp; Save Gemini Key</button>
-              <button type="button" class="outline" id="testGeminiKeyBtn">⚡ Test Connection</button>
-              <button type="button" class="outline" id="clearGeminiKeyBtn" style="color:#b45309; border-color:#fde68a;">🗑️ Clear Key</button>
-            </div>
-
-            <div style="margin-top:16px; padding-top:14px; border-top:1px solid #ece8f6; font-size:12.5px; line-height:1.6; color:#494559;">
-              💡 <b>Get a free Gemini API key:</b>
-              Visit <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" style="color:var(--p); font-weight:700; text-decoration:underline;">Google AI Studio</a>, generate an API key, and paste it above. Google Gemini 3.8 Flash is enabled for high-speed verbatim transcription and exam summaries.
-            </div>
-          </div>
-
-          <!-- TRANSCRIPTION ENGINE TIERS -->
-          <div style="margin-top:20px;">
-            <h3 style="font-size:14px; margin:0 0 10px; color:var(--text);">Audio Transcription &amp; Processing Pipeline</h3>
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:10px; font-size:12px;">
-              <div style="padding:12px; background:#fff; border:1px solid var(--border); border-radius:10px;">
-                <b style="color:var(--p); display:block; margin-bottom:4px;">1. Google Gemini (Primary)</b>
-                <span id="diagGeminiStatus" style="color:#b45309;">▲ Key required</span><br>
-                <small class="muted">Deep audio analysis &amp; revision notes</small>
+              <div>
+                <span class="meta-label">Subject / Topic</span>
+                <b id="detailLecture" style="font-size:15px;">-</b>
               </div>
-              <div style="padding:12px; background:#fff; border:1px solid var(--border); border-radius:10px;">
-                <b style="color:#17864a; display:block; margin-bottom:4px;">2. Browser Web Speech</b>
-                <span style="color:#17864a;">● Available during live mic recording</span><br>
-                <small class="muted">Instant real-time speech capture</small>
+              <div>
+                <span class="meta-label">Professor</span>
+                <b id="detailProfessor" style="font-size:15px;">-</b>
               </div>
-              <div style="padding:12px; background:#fff; border:1px solid var(--border); border-radius:10px;">
-                <b style="color:#0369a1; display:block; margin-bottom:4px;">3. Python Whisper Script</b>
-                <span id="diagWhisperStatus" style="color:var(--muted);">● Ready on server</span><br>
-                <small class="muted">Local fallback transcription engine</small>
+              <div>
+                <span class="meta-label">Recorded Date</span>
+                <b id="detailCreated" style="font-size:15px;">-</b>
+              </div>
+              <div>
+                <span class="meta-label">Publication Status</span>
+                <b id="detailStatus" style="font-size:15px;">-</b>
               </div>
             </div>
           </div>
@@ -936,33 +1200,41 @@
     </main>
   </div>
 
-  <!-- CREATE / EDIT STORAGE BOX MODAL -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
+  <!-- 📦 STORAGE BOX CREATE/EDIT MODAL                                    -->
+  <!-- ═══════════════════════════════════════════════════════════════════ -->
   <div id="boxModal" class="box-modal-backdrop hidden">
     <div class="box-modal">
       <div class="box-modal-header">
-        <h2 id="boxModalTitle">📦 Create Storage Box</h2>
+        <h2 id="boxModalTitle"><i data-lucide="archive"></i> Create Storage Box</h2>
         <button type="button" class="box-modal-close" id="boxModalCloseBtn">&times;</button>
       </div>
-      <form id="boxModalForm">
+      <form id="boxModalForm" style="margin-top:14px;">
         <input type="hidden" id="boxModalId" value="">
         <label class="meta-label">
-          Box Name *
-          <input id="boxModalName" type="text" class="meta-input" placeholder="Enter storage box name (e.g. Database Management Systems, Python...)" required autocomplete="off">
+          Storage Box Name *
+          <input type="text" id="boxModalName" class="meta-input" placeholder="e.g. Distributed Systems &amp; Cloud" required>
         </label>
         <label class="meta-label" style="margin-top:14px;">
-          Description
-          <textarea id="boxModalDesc" class="meta-input" rows="3" placeholder="Optional description of course topics or lecture series..."></textarea>
+          Description / Syllabus Overview
+          <textarea id="boxModalDesc" class="meta-input" rows="3" placeholder="Overview of lectures, curriculum topics, or course objectives stored in this box..."></textarea>
         </label>
-        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:22px;">
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;">
           <button type="button" class="outline" id="boxModalCancelBtn">Cancel</button>
-          <button type="submit" class="primary" id="boxModalSubmitBtn">📦 Create Box</button>
+          <button type="submit" class="primary" id="boxModalSubmitBtn"><i data-lucide="check"></i> Create Box</button>
         </div>
       </form>
     </div>
   </div>
 
   <div id="toast"></div>
+
+  <!-- Scripts -->
   <script src="js/app.js"></script>
-  <script>lucide.createIcons();</script>
+  <script>
+    if (window.lucide) {
+      lucide.createIcons();
+    }
+  </script>
 </body>
 </html>

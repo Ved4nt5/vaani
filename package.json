@@ -11,11 +11,18 @@
   },
   "dependencies": {
     "@google/genai": "^2.26.0",
+    "autoprefixer": "^10.6.1",
     "better-sqlite3": "^13.0.3",
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "lucide-react": "^1.60.0",
     "multer": "^1.4.5-lts.1",
-    "nodemailer": "^10.0.13"
+    "nodemailer": "^10.0.13",
+    "postcss": "^8.5.31",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.4",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
@@ -24,7 +31,11 @@
     "@types/multer": "^1.4.12",
     "@types/node": "^22.10.0",
     "@types/nodemailer": "^8.0.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vite": "^8.3.4"
   }
 }

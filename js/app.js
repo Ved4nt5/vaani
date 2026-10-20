@@ -96,8 +96,8 @@ function setUserInfo() {
   const settingsSelect = document.querySelector('#settings select');
   const settingsTz = document.getElementById('settingsTimezone');
 
-  if (profileEl) profileEl.textContent = name;
-  if (roleBadge) roleBadge.textContent = isFaculty ? '👨‍🏫 Faculty' : '🎓 Student';
+  if (profileEl) profileEl.innerHTML = `<i data-lucide="user-circle" style="width:16px;height:16px;color:var(--muted);flex-shrink:0;"></i> <span>${escapeHtml(name)}</span>`;
+  if (roleBadge) roleBadge.innerHTML = isFaculty ? '<i data-lucide="graduation-cap"></i> Faculty' : '<i data-lucide="user"></i> Student';
   if (eyebrow) eyebrow.textContent = 'Welcome back, ' + name + '!';
   if (facEyebrow) facEyebrow.textContent = 'Welcome back, ' + name + '!';
   if (settingsName) settingsName.value = name;
@@ -143,9 +143,11 @@ function setUserInfo() {
     if (facAvatar) {
       facAvatarDisplay.innerHTML = `<img src="${facAvatar}" alt="Profile">`;
     } else {
-      facAvatarDisplay.textContent = '👨‍🏫';
+      facAvatarDisplay.innerHTML = '<i data-lucide="user" style="width:36px;height:36px;color:var(--p)"></i>';
     }
   }
+
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
 }
 setUserInfo();
 
@@ -343,6 +345,9 @@ function page(id) {
     id === 'facultyAnalytics'
   ) {
     loadRecordings();
+    if (id === 'facultyAnalytics') {
+      loadFacultyAnalytics();
+    }
   }
   if (id === 'storageBoxes' || id === 'facultyUpload' || id === 'recordings') {
     fetchStorageBoxes();
@@ -461,24 +466,26 @@ function rowHtml(x) {
   const audioSrc = x.audioDataUrl ? x.audioDataUrl : `${API_BASE}/${x.id}/audio`;
   const displayDate = formatLocalDisplayDate(x.createdAtIso || x.createdAt);
   const canDelete = isFacultyRole();
-  const subjectLabel = x.storageBoxName || x.subject || x.lectureName || '-';
+  const subjectLabel = x.storageBoxName
+    ? `<span class="box-tag"><i data-lucide="archive"></i> ${escapeHtml(x.storageBoxName)}</span>`
+    : escapeHtml(x.subject || x.lectureName || '-');
   return `
     <tr>
       <td><b>${escapeHtml(x.title)}</b></td>
-      <td>${escapeHtml(subjectLabel)}</td>
+      <td>${subjectLabel}</td>
       <td>${escapeHtml(x.professorName || '-')}</td>
       <td>${escapeHtml(x.duration || '00:00')}</td>
       <td>${escapeHtml(displayDate)}</td>
-      <td><span class="badge">🌐 Published</span></td>
+      <td><span class="badge badge-published"><i data-lucide="check-circle-2"></i> Published</span></td>
       <td>
         ${x.hasAudio
-          ? `<audio controls src="${audioSrc}" preload="metadata" style="height:32px;width:190px;outline:none;"></audio>`
+          ? `<audio controls src="${audioSrc}" preload="metadata" style="height:32px;width:190px;outline:none;border-radius:6px;"></audio>`
           : '<small class="muted">No Audio</small>'}
       </td>
       <td style="white-space:nowrap;">
-        <button class="outline view" data-id="${x.id}">🎧 Listen &amp; View</button>
+        <button class="primary act-btn view" data-id="${x.id}"><i data-lucide="headphones"></i> Listen &amp; View</button>
         ${canDelete
-          ? `<button class="outline delete-rec" data-id="${x.id}" style="color:#d32f2f;border-color:#ffcdd2;margin-left:4px;">Delete</button>`
+          ? `<button class="outline act-btn delete-rec" data-id="${x.id}" style="color:var(--danger);border-color:var(--danger-border);margin-left:4px;"><i data-lucide="trash-2"></i> Delete</button>`
           : ''}
       </td>
     </tr>`;
@@ -500,7 +507,7 @@ function syncStudentSubjectFilter() {
 
   const opts = ['<option value="ALL">All Storage Boxes &amp; Subjects</option>'];
   Array.from(topics).forEach(t => {
-    opts.push(`<option value="${escapeHtml(t)}">📦 ${escapeHtml(t)}</option>`);
+    opts.push(`<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`);
   });
   sel.innerHTML = opts.join('');
   if (Array.from(sel.options).some(o => o.value === prevVal)) {
@@ -553,6 +560,8 @@ function renderRecordings() {
     return acc + (parts[0] || 0) + (parts[1] || 0) / 60;
   }, 0);
   if (statAudEl) statAudEl.textContent = (totalMin / 60).toFixed(1) + ' hrs';
+
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
 }
 
 // ── Detail view ────────────────────────────────────────────
@@ -960,15 +969,15 @@ if (facDateInput && !facDateInput.value) {
 function getFacultyStatusBadgeHtml(rec) {
   const st = rec.facultyStatus || (rec.published !== false ? 'PUBLISHED' : 'READY');
   if (st === 'PUBLISHED') {
-    return '<span class="badge badge-published">🚀 PUBLISHED</span>';
+    return '<span class="badge badge-published"><i data-lucide="check-circle-2"></i> Published</span>';
   }
   if (st === 'PROCESSING') {
-    return '<span class="badge badge-processing">⏳ PROCESSING</span>';
+    return '<span class="badge badge-processing"><i data-lucide="loader-2"></i> Processing</span>';
   }
   if (st === 'DRAFT') {
-    return '<span class="badge badge-draft">📝 DRAFT</span>';
+    return '<span class="badge badge-draft"><i data-lucide="file-edit"></i> Draft</span>';
   }
-  return '<span class="badge badge-ready">👁️ READY FOR REVIEW</span>';
+  return '<span class="badge badge-ready"><i data-lucide="eye"></i> Ready for Review</span>';
 }
 
 function facultyRowHtml(x, showPublishToggle = true) {
@@ -976,24 +985,26 @@ function facultyRowHtml(x, showPublishToggle = true) {
   const isPub = x.facultyStatus === 'PUBLISHED' || x.published === true;
   const pubBtn = showPublishToggle
     ? (isPub
-        ? `<button class="outline act-btn fac-pub-toggle" data-id="${x.id}" data-publish="0" style="color:#b45309;border-color:#fde68a;">🔒 Unpublish</button>`
-        : `<button class="primary act-btn fac-pub-toggle" data-id="${x.id}" data-publish="1" style="background:#17864a;border-color:#17864a;">🚀 Publish</button>`)
+        ? `<button class="outline act-btn fac-pub-toggle" data-id="${x.id}" data-publish="0" style="color:var(--warning);border-color:var(--warning-border);"><i data-lucide="lock"></i> Unpublish</button>`
+        : `<button class="primary act-btn fac-pub-toggle" data-id="${x.id}" data-publish="1" style="background:var(--success);border-color:var(--success);"><i data-lucide="send"></i> Publish</button>`)
     : '';
-  const boxOrSubject = x.storageBoxName ? `📦 ${x.storageBoxName}` : (x.subject || x.lectureName || 'General');
+  const boxOrSubject = x.storageBoxName
+    ? `<span class="box-tag"><i data-lucide="archive"></i> ${escapeHtml(x.storageBoxName)}</span>`
+    : escapeHtml(x.subject || x.lectureName || 'General');
 
   return `
     <tr>
       <td><b>${escapeHtml(x.title)}</b></td>
-      <td>${escapeHtml(boxOrSubject)}</td>
+      <td>${boxOrSubject}</td>
       <td>${escapeHtml(x.classCourse || 'SE Computer Engineering')}</td>
       <td>${escapeHtml(displayDate)}</td>
       <td>${getFacultyStatusBadgeHtml(x)}</td>
       <td>${escapeHtml(x.duration || '00:00')}</td>
       <td style="white-space:nowrap;">
-        <button class="outline act-btn fac-review-btn" data-id="${x.id}" data-edit="0">👁 Review</button>
-        <button class="outline act-btn fac-review-btn" data-id="${x.id}" data-edit="1">✏ Edit</button>
+        <button class="outline act-btn fac-review-btn" data-id="${x.id}" data-edit="0"><i data-lucide="eye"></i> Review</button>
+        <button class="outline act-btn fac-review-btn" data-id="${x.id}" data-edit="1"><i data-lucide="edit-3"></i> Edit</button>
         ${pubBtn}
-        <button class="outline act-btn delete-rec" data-id="${x.id}" style="color:#d32f2f;border-color:#ffcdd2;">🗑 Delete</button>
+        <button class="outline act-btn delete-rec" data-id="${x.id}" style="color:var(--danger);border-color:var(--danger-border);"><i data-lucide="trash-2"></i> Delete</button>
       </td>
     </tr>`;
 }
@@ -1043,43 +1054,1182 @@ function renderFacultyViews() {
     allRowsEl.innerHTML = filtered.map(r => facultyRowHtml(r, true)).join('') || emptyRow;
   }
 
-  // Basic Analytics section
-  const anaStudentsEl = document.getElementById('anaTotalStudents');
-  const anaPlaysEl = document.getElementById('anaTotalPlays');
-  const anaAvgTimeEl = document.getElementById('anaAvgTime');
-  const anaRowsEl = document.getElementById('facultyAnalyticsRows');
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
 
-  let totalStudents = 0;
-  let totalPlays = 0;
-  recordings.forEach((r, idx) => {
-    const isPub = r.facultyStatus === 'PUBLISHED' || r.published === true;
-    const stu = typeof r.studentsAccessed === 'number' ? r.studentsAccessed : (isPub ? 24 + idx * 5 : 0);
-    const pl = typeof r.playsCount === 'number' ? r.playsCount : (isPub ? 52 + idx * 14 : 1);
-    totalStudents += stu;
-    totalPlays += pl;
+  // If Analytics section is visible, keep it in sync with fresh recordings
+  if (document.getElementById('facultyAnalytics')?.classList.contains('active')) {
+    loadFacultyAnalytics();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// 📊 VAANI FACULTY ANALYTICS CONTROLLER
+// ═══════════════════════════════════════════════════════════════════
+
+const facultyAnalyticsState = {
+  data: null,
+  loading: false,
+  error: null,
+  selectedDate: null, // 'YYYY-MM-DD'
+  calendarYear: new Date().getFullYear(),
+  calendarMonth: new Date().getMonth(), // 0-11
+  weekOffset: 0, // 0 = current week, -1 = last week, +1 = next week
+  activityFilter: '',
+  tableDateFilter: null,
+  eventsInitialized: false,
+};
+
+// Date math helper for 7-day week (Monday to Sunday)
+function getWeekRangeAndDays(offset = 0) {
+  const today = new Date();
+  const todayY = today.getFullYear();
+  const todayM = today.getMonth();
+  const todayD = today.getDate();
+  const todayStr = `${todayY}-${String(todayM + 1).padStart(2, '0')}-${String(todayD).padStart(2, '0')}`;
+
+  const dayOfWeek = today.getDay(); // 0 is Sun, 1 is Mon
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const mondayTime = new Date(todayY, todayM, todayD + diffToMonday + (offset * 7)).getTime();
+
+  const days = [];
+  const dayNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(mondayTime + i * 86400000);
+    const y = d.getFullYear();
+    const m = d.getMonth() + 1;
+    const dateNum = d.getDate();
+    const dateStr = `${y}-${String(m).padStart(2, '0')}-${String(dateNum).padStart(2, '0')}`;
+    days.push({
+      dateStr,
+      dayName: dayNames[i],
+      dateNum,
+      isToday: dateStr === todayStr,
+      fullDate: d,
+    });
+  }
+
+  const startDay = days[0];
+  const endDay = days[6];
+  const startMonthName = startDay.fullDate.toLocaleString('default', { month: 'short' });
+  const endMonthName = endDay.fullDate.toLocaleString('default', { month: 'short' });
+
+  const rangeLabel = startMonthName === endMonthName
+    ? `${startMonthName} ${startDay.dateNum} &ndash; ${endDay.dateNum}, ${startDay.fullDate.getFullYear()}`
+    : `${startMonthName} ${startDay.dateNum} &ndash; ${endMonthName} ${endDay.dateNum}, ${endDay.fullDate.getFullYear()}`;
+
+  return {
+    days,
+    startStr: startDay.dateStr,
+    endStr: endDay.dateStr,
+    rangeLabel,
+    isCurrentWeek: offset === 0,
+  };
+}
+
+// Month calendar grid helper
+function getMonthCalendarGrid(year, month) {
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const totalDays = lastDay.getDate();
+
+  let startDayOfWeek = firstDay.getDay() - 1; // 0 for Monday, 6 for Sunday
+  if (startDayOfWeek === -1) startDayOfWeek = 6;
+
+  const prevMonthLastDay = new Date(year, month, 0).getDate();
+  const cells = [];
+
+  // Trailing days from previous month
+  for (let i = startDayOfWeek - 1; i >= 0; i--) {
+    const dayNum = prevMonthLastDay - i;
+    const prevDate = new Date(year, month - 1, dayNum);
+    const pY = prevDate.getFullYear();
+    const pM = prevDate.getMonth() + 1;
+    const dateStr = `${pY}-${String(pM).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+    cells.push({
+      dateStr,
+      dayNum,
+      isCurrentMonth: false,
+      isToday: dateStr === todayStr,
+    });
+  }
+
+  // Days of current month
+  for (let d = 1; d <= totalDays; d++) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    cells.push({
+      dateStr,
+      dayNum: d,
+      isCurrentMonth: true,
+      isToday: dateStr === todayStr,
+    });
+  }
+
+  // Leading days of next month to complete 7-column rows
+  const remaining = (7 - (cells.length % 7)) % 7;
+  for (let d = 1; d <= remaining; d++) {
+    const nextDate = new Date(year, month + 1, d);
+    const nY = nextDate.getFullYear();
+    const nM = nextDate.getMonth() + 1;
+    const dateStr = `${nY}-${String(nM).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    cells.push({
+      dateStr,
+      dayNum: d,
+      isCurrentMonth: false,
+      isToday: dateStr === todayStr,
+    });
+  }
+
+  const monthTitle = firstDay.toLocaleString('default', { month: 'long', year: 'numeric' });
+  return { cells, monthTitle, totalDays };
+}
+
+// Fetch analytics data from server
+async function loadFacultyAnalytics(forceRefresh = false) {
+  if (facultyAnalyticsState.loading && !forceRefresh) return;
+
+  initFacultyAnalyticsEvents();
+  renderAnalyticsLoading(true);
+
+  try {
+    const res = await fetch('/api/faculty/analytics', { headers: authHeaders() });
+    if (handleAuthError(res)) return;
+
+    if (!res.ok) {
+      throw new Error(`Server returned HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    facultyAnalyticsState.data = data;
+    facultyAnalyticsState.loading = false;
+    facultyAnalyticsState.error = null;
+
+    // Pick a sensible default selected date for the calendar
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    if (!facultyAnalyticsState.selectedDate) {
+      if (data.publishedDatesMap && data.publishedDatesMap[todayStr]) {
+        facultyAnalyticsState.selectedDate = todayStr;
+      } else {
+        // If today has no lectures, check if any date in the current month has lectures
+        const monthPrefix = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        const datesInMonth = Object.keys(data.publishedDatesMap || {}).filter(d => d.startsWith(monthPrefix)).sort();
+        facultyAnalyticsState.selectedDate = datesInMonth.length > 0 ? datesInMonth[datesInMonth.length - 1] : todayStr;
+      }
+    }
+
+    renderAnalyticsSuccess();
+  } catch (err) {
+    console.error('[Analytics] Failed to fetch data:', err);
+    facultyAnalyticsState.loading = false;
+    facultyAnalyticsState.error = err.message || 'Could not connect to analytics service.';
+    renderAnalyticsError(facultyAnalyticsState.error);
+  }
+}
+
+// Render elegant loading skeletons across analytics cards, chart, calendar, and tables
+function renderAnalyticsLoading(isLoading) {
+  facultyAnalyticsState.loading = isLoading;
+  const errorBanner = document.getElementById('anaErrorBanner');
+  if (errorBanner) errorBanner.classList.add('hidden');
+
+  if (!isLoading) return;
+
+  // 4 Top KPI skeleton stats
+  const kpiIds = ['anaTotalRegistered', 'anaTotalEnrolled', 'anaTotalPlays', 'anaPublishedCount'];
+  kpiIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<span class="ana-skeleton ana-skeleton-stat"></span>';
   });
 
-  if (anaStudentsEl) anaStudentsEl.textContent = String(totalStudents);
-  if (anaPlaysEl) anaPlaysEl.textContent = String(totalPlays);
-  if (anaAvgTimeEl) anaAvgTimeEl.textContent = publishedCount > 0 ? '31m 20s' : '00m 00s';
+  // Wellbeing skeleton stats
+  const weekCountEl = document.getElementById('anaPublishedWeekCount');
+  const monthCountEl = document.getElementById('anaPublishedMonthCount');
+  if (weekCountEl) weekCountEl.innerHTML = '<span class="ana-skeleton ana-skeleton-stat"></span>';
+  if (monthCountEl) monthCountEl.innerHTML = '<span class="ana-skeleton ana-skeleton-stat"></span>';
 
-  if (anaRowsEl) {
-    anaRowsEl.innerHTML = recordings.map((r, idx) => {
-      const isPub = r.facultyStatus === 'PUBLISHED' || r.published === true;
-      const stu = typeof r.studentsAccessed === 'number' ? r.studentsAccessed : (isPub ? 24 + idx * 5 : 0);
-      const pl = typeof r.playsCount === 'number' ? r.playsCount : (isPub ? 52 + idx * 14 : 1);
-      const avg = r.avgListeningTime || (isPub ? '30m 15s' : '00m 00s');
-      return `
-        <tr>
-          <td><b>${escapeHtml(r.title)}</b></td>
-          <td>${escapeHtml(r.storageBoxName || r.subject || r.lectureName || '-')}</td>
-          <td>${escapeHtml(r.classCourse || 'SE Computer Engineering')}</td>
-          <td>${getFacultyStatusBadgeHtml(r)}</td>
-          <td><b>${stu}</b> students</td>
-          <td><b>${pl}</b> plays</td>
-          <td>${escapeHtml(avg)}</td>
-        </tr>`;
-    }).join('') || emptyRow;
+  // Wellbeing bars skeleton
+  const barsContainer = document.getElementById('anaWeekBarsContainer');
+  if (barsContainer) {
+    barsContainer.innerHTML = Array(7).fill(0).map((_, i) => `
+      <div class="wellbeing-bar-col">
+        <div class="wellbeing-bar-track">
+          <div class="ana-skeleton" style="width:100%;height:${35 + (i * 8)}%;"></div>
+        </div>
+        <div class="wellbeing-day-label">
+          <span class="ana-skeleton" style="width:20px;height:12px;"></span>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // Calendar skeleton cells
+  const calGrid = document.getElementById('anaCalendarGrid');
+  if (calGrid) {
+    calGrid.innerHTML = Array(28).fill(0).map(() => `
+      <div class="ana-cal-cell" style="cursor:default;">
+        <span class="ana-skeleton" style="width:20px;height:20px;border-radius:4px;"></span>
+      </div>
+    `).join('');
+  }
+
+  // Selected date details skeleton
+  const detailList = document.getElementById('anaCalDetailList');
+  if (detailList) {
+    detailList.innerHTML = `
+      <div class="ana-cal-lecture-card">
+        <div class="ana-skeleton ana-skeleton-title"></div>
+        <div class="ana-skeleton ana-skeleton-text" style="width:60%;"></div>
+        <div class="ana-skeleton ana-skeleton-text" style="width:40%;"></div>
+      </div>
+    `;
+  }
+
+  // Recent activity skeleton rows
+  const actRows = document.getElementById('anaRecentActivityRows');
+  if (actRows) {
+    actRows.innerHTML = `
+      <tr><td colspan="5" style="padding:18px;"><div class="ana-skeleton ana-skeleton-text"></div></td></tr>
+      <tr><td colspan="5" style="padding:18px;"><div class="ana-skeleton ana-skeleton-text" style="width:85%;"></div></td></tr>
+      <tr><td colspan="5" style="padding:18px;"><div class="ana-skeleton ana-skeleton-text" style="width:70%;"></div></td></tr>
+    `;
+  }
+
+  // Breakdown table skeleton rows
+  const tableRows = document.getElementById('facultyAnalyticsRows');
+  if (tableRows) {
+    tableRows.innerHTML = `
+      <tr><td colspan="7" style="padding:18px;"><div class="ana-skeleton ana-skeleton-text"></div></td></tr>
+      <tr><td colspan="7" style="padding:18px;"><div class="ana-skeleton ana-skeleton-text" style="width:80%;"></div></td></tr>
+      <tr><td colspan="7" style="padding:18px;"><div class="ana-skeleton ana-skeleton-text" style="width:65%;"></div></td></tr>
+    `;
+  }
+}
+
+// Render error banner with retry action
+function renderAnalyticsError(msg) {
+  const errorBanner = document.getElementById('anaErrorBanner');
+  const errorMsgEl = document.getElementById('anaErrorMsg');
+  if (errorBanner) {
+    errorBanner.classList.remove('hidden');
+    if (errorMsgEl) errorMsgEl.textContent = msg || 'Could not load analytics. Check server connection.';
+  }
+
+  // Reset KPI cards to dashes
+  ['anaTotalRegistered', 'anaTotalEnrolled', 'anaTotalPlays', 'anaPublishedCount'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = '—';
+  });
+
+  const weekCountEl = document.getElementById('anaPublishedWeekCount');
+  const monthCountEl = document.getElementById('anaPublishedMonthCount');
+  if (weekCountEl) weekCountEl.textContent = '—';
+  if (monthCountEl) monthCountEl.textContent = '—';
+
+  // Details empty state
+  const detailList = document.getElementById('anaCalDetailList');
+  if (detailList) {
+    detailList.innerHTML = `
+      <div class="ana-empty-state">
+        <div class="ana-empty-icon">⚠️</div>
+        <h3 class="ana-empty-title">Analytics Temporarily Unavailable</h3>
+        <p class="ana-empty-desc">Failed to connect to the backend analytics server. Click retry to refresh.</p>
+        <button type="button" class="primary" onclick="loadFacultyAnalytics(true)">🔄 Retry Analytics</button>
+      </div>
+    `;
+  }
+
+  // Activity stream error state
+  const actRows = document.getElementById('anaRecentActivityRows');
+  if (actRows) {
+    actRows.innerHTML = `
+      <tr><td colspan="5" style="text-align:center;padding:32px;" class="muted">
+        ⚠️ Unable to load access logs. <button type="button" class="outline" onclick="loadFacultyAnalytics(true)" style="margin-left:8px;padding:4px 10px;font-size:12px;">Retry</button>
+      </td></tr>
+    `;
+  }
+
+  // Breakdown error state
+  const tableRows = document.getElementById('facultyAnalyticsRows');
+  if (tableRows) {
+    tableRows.innerHTML = `
+      <tr><td colspan="7" style="text-align:center;padding:32px;" class="muted">
+        ⚠️ Unable to load lecture breakdown data. <button type="button" class="outline" onclick="loadFacultyAnalytics(true)" style="margin-left:8px;padding:4px 10px;font-size:12px;">Retry</button>
+      </td></tr>
+    `;
+  }
+}
+
+// Render all sections upon successful data retrieval
+function renderAnalyticsSuccess() {
+  const data = facultyAnalyticsState.data;
+  if (!data) return;
+
+  // 1. KPI cards
+  const elReg = document.getElementById('anaTotalRegistered');
+  const elEnr = document.getElementById('anaTotalEnrolled');
+  const elPls = document.getElementById('anaTotalPlays');
+  const elPub = document.getElementById('anaPublishedCount');
+
+  if (elReg) elReg.textContent = String(data.totalRegisteredStudents || 0);
+  if (elEnr) elEnr.textContent = String(data.totalStudentsOnFacultyLectures || 0);
+  if (elPls) elPls.textContent = String(data.totalPlays || 0);
+  if (elPub) elPub.textContent = String(data.publishedLectures || 0);
+
+  // 2. Digital Wellbeing Section
+  renderWellbeingSection();
+
+  // 3. Interactive Calendar
+  renderInteractiveCalendar();
+
+  // 4. Selected Date Details
+  renderSelectedDateDetails();
+
+  // 5. Recent Activity Feed
+  renderRecentActivityStream();
+
+  // 6. Lecture Engagement Breakdown Table
+  renderAnalyticsLecturesTable();
+
+  // Re-initialize lucide icons
+  if (window.lucide && typeof lucide.createIcons === 'function') {
+    lucide.createIcons();
+  }
+}
+
+// ── 🌿 Digital Wellbeing Overview & 7-Day Bar Chart ───────────────────────────
+function renderWellbeingSection() {
+  const data = facultyAnalyticsState.data;
+  if (!data) return;
+
+  const weekData = getWeekRangeAndDays(facultyAnalyticsState.weekOffset);
+  const lectureStats = data.lectureStats || [];
+
+  // Count published lectures for the week currently displayed in chart
+  const weekLectures = lectureStats.filter(r => {
+    if (!r.published) return false;
+    const pDate = r.lectureDate || '';
+    return pDate >= weekData.startStr && pDate <= weekData.endStr;
+  });
+  const weekCount = weekData.isCurrentWeek && typeof data.publishedThisWeek === 'number'
+    ? data.publishedThisWeek
+    : weekLectures.length;
+
+  // Count published lectures for current month
+  const monthCount = typeof data.publishedThisMonth === 'number'
+    ? data.publishedThisMonth
+    : lectureStats.filter(r => r.published).length;
+
+  // Update Tile Numbers
+  const weekNumEl = document.getElementById('anaPublishedWeekCount');
+  const monthNumEl = document.getElementById('anaPublishedMonthCount');
+  const weekRangeEl = document.getElementById('anaWeekDateRangeLabel');
+  const monthBadgeEl = document.getElementById('anaMonthNameBadge');
+  const monthRangeEl = document.getElementById('anaMonthDateRangeLabel');
+  const weekProgressEl = document.getElementById('anaWeekProgressFill');
+  const monthProgressEl = document.getElementById('anaMonthProgressFill');
+  const weekGoalText = document.getElementById('anaWeekGoalText');
+  const streakBadge = document.getElementById('anaStreakBadge');
+
+  if (weekNumEl) weekNumEl.textContent = String(weekCount);
+  if (monthNumEl) monthNumEl.textContent = String(monthCount);
+  if (weekRangeEl) weekRangeEl.innerHTML = weekData.rangeLabel;
+
+  const currentMonthName = new Date().toLocaleString('default', { month: 'long' });
+  if (monthBadgeEl) monthBadgeEl.textContent = currentMonthName;
+  if (monthRangeEl) monthRangeEl.textContent = `Full month of ${currentMonthName}`;
+
+  // Progress tracks loaded directly from SQLite database (defaults 3 / 6)
+  const weeklyTarget = Number(data.weeklyTarget) || 3;
+  const monthlyTarget = Number(data.monthlyTarget) || 6;
+
+  const weekPct = Math.min(100, Math.round((weekCount / weeklyTarget) * 100));
+  if (weekProgressEl) weekProgressEl.style.width = `${weekPct}%`;
+  if (weekGoalText) {
+    weekGoalText.textContent = weekCount >= weeklyTarget
+      ? `Goal achieved: ${weekCount}/${weeklyTarget} lectures / week`
+      : `Weekly Target: ${weekCount}/${weeklyTarget} lectures (${weekPct}%)`;
+  }
+
+  const monthPct = Math.min(100, Math.round((monthCount / monthlyTarget) * 100));
+  if (monthProgressEl) monthProgressEl.style.width = `${monthPct}%`;
+  const monthFooterText = document.getElementById('anaMonthSummaryText');
+  if (monthFooterText) {
+    monthFooterText.textContent = monthCount >= monthlyTarget
+      ? `Monthly Goal Met: ${monthCount}/${monthlyTarget} published`
+      : `Monthly Pace: ${monthCount}/${monthlyTarget} (${monthPct}%)`;
+  }
+
+  if (streakBadge) {
+    if (weekCount >= weeklyTarget) {
+      streakBadge.textContent = '🌟 Peak Teaching Momentum';
+      streakBadge.style.color = '#15803d';
+      streakBadge.style.background = '#f0fdf4';
+      streakBadge.style.borderColor = '#bbf7d0';
+    } else if (weekCount > 0) {
+      streakBadge.textContent = '🟢 Steady Teaching Rhythm';
+      streakBadge.style.color = '#15803d';
+      streakBadge.style.background = '#f0fdf4';
+      streakBadge.style.borderColor = '#bbf7d0';
+    } else {
+      streakBadge.textContent = '🌿 Rest & Prep Cadence';
+      streakBadge.style.color = '#b45309';
+      streakBadge.style.background = '#fffbeb';
+      streakBadge.style.borderColor = '#fde68a';
+    }
+  }
+
+  // Chart Header label
+  const chartWeekRangeLabel = document.getElementById('anaChartWeekRangeLabel');
+  if (chartWeekRangeLabel) {
+    chartWeekRangeLabel.innerHTML = weekData.rangeLabel;
+  }
+
+  // Render 7-day mini bar chart
+  const barsContainer = document.getElementById('anaWeekBarsContainer');
+  if (!barsContainer) return;
+
+  // Calculate day-by-day counts for the week
+  const dayStats = weekData.days.map(d => {
+    const dayRecs = lectureStats.filter(r => r.published && r.lectureDate === d.dateStr);
+    return {
+      ...d,
+      count: dayRecs.length,
+      lectures: dayRecs,
+    };
+  });
+
+  const maxDayCount = Math.max(1, ...dayStats.map(d => d.count));
+  const totalChartLectures = dayStats.reduce((sum, d) => sum + d.count, 0);
+
+  const summaryHint = document.getElementById('anaChartWeekSummaryHint');
+  if (summaryHint) {
+    summaryHint.textContent = totalChartLectures === 1
+      ? '1 lecture in this week'
+      : `${totalChartLectures} lectures in this week`;
+  }
+
+  barsContainer.innerHTML = dayStats.map(d => {
+    const isSelected = facultyAnalyticsState.selectedDate === d.dateStr;
+    const heightPct = d.count > 0 ? Math.max(22, Math.round((d.count / maxDayCount) * 82)) : 0;
+    const hasCountClass = d.count > 0 ? 'has-count' : '';
+    const todayClass = d.isToday ? 'today' : '';
+    const badgeHtml = d.count > 0 ? `<span class="wellbeing-bar-count-badge">${d.count}</span>` : '';
+
+    return `
+      <div class="wellbeing-bar-col ${isSelected ? 'selected' : ''}" data-date="${d.dateStr}" title="${escapeHtml(d.dayName)}, ${escapeHtml(d.dateStr)}: ${d.count} published lecture${d.count === 1 ? '' : 's'}">
+        ${badgeHtml}
+        <div class="wellbeing-bar-track" style="${isSelected ? 'background:#dcd0ff;border:1px solid var(--p);' : ''}">
+          <div class="wellbeing-bar-fill ${hasCountClass}" style="height:${heightPct}%;"></div>
+        </div>
+        <div class="wellbeing-day-label ${todayClass}">
+          <span class="wellbeing-day-pill">${d.dateNum}</span>
+          <span style="font-size:10.5px;">${d.dayName}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Wire click on day bars to focus calendar and details
+  barsContainer.querySelectorAll('.wellbeing-bar-col').forEach(col => {
+    col.addEventListener('click', () => {
+      const dateStr = col.dataset.date;
+      if (!dateStr) return;
+      selectAnalyticsDate(dateStr);
+    });
+  });
+}
+
+// ── 📅 Interactive Calendar ───────────────────────────────────────────────────
+function renderInteractiveCalendar() {
+  const data = facultyAnalyticsState.data;
+  if (!data) return;
+
+  const year = facultyAnalyticsState.calendarYear;
+  const month = facultyAnalyticsState.calendarMonth;
+  const monthData = getMonthCalendarGrid(year, month);
+
+  const titleEl = document.getElementById('calMonthYearTitle');
+  if (titleEl) titleEl.textContent = monthData.monthTitle;
+
+  const calGrid = document.getElementById('anaCalendarGrid');
+  if (!calGrid) return;
+
+  const publishedMap = data.publishedDatesMap || {};
+  const selectedDate = facultyAnalyticsState.selectedDate;
+
+  calGrid.innerHTML = monthData.cells.map(cell => {
+    const dateStr = cell.dateStr;
+    const dayLectures = publishedMap[dateStr] || [];
+    const hasLectures = dayLectures.length > 0;
+    const lectureCount = dayLectures.length;
+    const isSelected = selectedDate === dateStr;
+
+    let markerHtml = '';
+    if (hasLectures) {
+      if (lectureCount > 1) {
+        markerHtml = `<span class="ana-cal-lecture-badge">${lectureCount}</span>`;
+      } else {
+        markerHtml = `<div class="ana-cal-dot-wrap"><span class="ana-cal-dot"></span></div>`;
+      }
+    } else {
+      markerHtml = `<div class="ana-cal-dot-wrap"></div>`;
+    }
+
+    const classes = [
+      'ana-cal-cell',
+      cell.isCurrentMonth ? '' : 'other-month',
+      cell.isToday ? 'today' : '',
+      hasLectures ? 'has-lectures' : '',
+      isSelected ? 'selected' : '',
+    ].filter(Boolean).join(' ');
+
+    const titleText = `${dateStr}${hasLectures ? ' • ' + lectureCount + ' lecture(s)' : ''}`;
+
+    return `
+      <button type="button" class="${classes}" data-date="${dateStr}" data-curr="${cell.isCurrentMonth ? 1 : 0}" title="${titleText}">
+        <span>${cell.dayNum}</span>
+        ${markerHtml}
+      </button>
+    `;
+  }).join('');
+
+  // Attach click listener to calendar day cells
+  calGrid.querySelectorAll('.ana-cal-cell').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const dateStr = btn.dataset.date;
+      const isCurr = btn.dataset.curr === '1';
+      if (!dateStr) return;
+
+      if (!isCurr) {
+        // If clicking a trailing/leading day from adjacent month, shift view to that month
+        const [y, m] = dateStr.split('-').map(Number);
+        facultyAnalyticsState.calendarYear = y;
+        facultyAnalyticsState.calendarMonth = m - 1;
+      }
+
+      selectAnalyticsDate(dateStr);
+    });
+  });
+
+  // Toggle clear filter button visibility
+  const clearBtn = document.getElementById('calClearFilterBtn');
+  if (clearBtn) {
+    clearBtn.classList.toggle('hidden', !selectedDate);
+  }
+}
+
+// Select a date across calendar, details inspector, wellbeing bars, and table
+function selectAnalyticsDate(dateStr) {
+  facultyAnalyticsState.selectedDate = dateStr;
+  renderInteractiveCalendar();
+  renderSelectedDateDetails();
+  renderWellbeingSection(); // highlight selected day bar
+
+  // Optionally scroll smoothly to date details if on mobile
+  if (window.innerWidth < 960) {
+    const detailCard = document.getElementById('anaCalDetailCard');
+    if (detailCard) detailCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+// Format date into human-friendly string (e.g. "Tuesday, October 20, 2026")
+function formatFriendlyDate(dateStr) {
+  if (!dateStr) return 'Selected Date';
+  const parts = dateStr.split('-');
+  if (parts.length !== 3) return dateStr;
+  const d = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0));
+  return d.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
+
+// ── 🗓️ Selected Date Inspector & Details ───────────────────────────────────────
+function renderSelectedDateDetails() {
+  const data = facultyAnalyticsState.data;
+  const detailList = document.getElementById('anaCalDetailList');
+  const countBadge = document.getElementById('calSelectedDateCountBadge');
+  const subtitleEl = document.getElementById('calSelectedDateSubtitle');
+
+  if (!detailList || !data) return;
+
+  const dateStr = facultyAnalyticsState.selectedDate;
+
+  if (!dateStr) {
+    if (subtitleEl) subtitleEl.textContent = 'Select a date on the calendar';
+    if (countBadge) countBadge.textContent = '0 Lectures';
+    detailList.innerHTML = `
+      <div class="ana-empty-state">
+        <div class="ana-empty-icon"><i data-lucide="calendar"></i></div>
+        <h3 class="ana-empty-title">No Date Selected</h3>
+        <p class="ana-empty-desc">Click any calendar date to inspect lectures published or scheduled on that day.</p>
+        <button type="button" class="primary" id="calPickTodayBtn">Select Today</button>
+      </div>
+    `;
+    const pickToday = document.getElementById('calPickTodayBtn');
+    if (pickToday) {
+      pickToday.addEventListener('click', () => {
+        const now = new Date();
+        const tStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        selectAnalyticsDate(tStr);
+      });
+    }
+    if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+    return;
+  }
+
+  const friendlyDate = formatFriendlyDate(dateStr);
+  if (subtitleEl) subtitleEl.textContent = friendlyDate;
+
+  // Filter lectures matching this date
+  const lectureStats = data.lectureStats || [];
+  const matchingLectures = lectureStats.filter(r => r.lectureDate === dateStr);
+  const count = matchingLectures.length;
+
+  if (countBadge) {
+    countBadge.textContent = count === 1 ? '1 Lecture' : `${count} Lectures`;
+    countBadge.className = count > 0 ? 'badge badge-published' : 'badge';
+  }
+
+  // 1. CLEAR EMPTY STATE if no lectures on this date
+  if (count === 0) {
+    detailList.innerHTML = `
+      <div class="ana-empty-state">
+        <div class="ana-empty-icon"><i data-lucide="calendar-x-2"></i></div>
+        <h3 class="ana-empty-title">No Lectures on this Day</h3>
+        <p class="ana-empty-desc">No classroom lectures were published on <b>${escapeHtml(friendlyDate)}</b>. You can pick any highlighted date with a dot marker, or create a new lecture.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+          <button type="button" class="primary cal-new-on-date-btn" data-page="facultyUpload">+ Create New Lecture on this Date</button>
+          <button type="button" class="outline" id="calJumpLatestBtn">Jump to Latest Lecture</button>
+        </div>
+      </div>
+    `;
+
+    const newOnDateBtn = detailList.querySelector('.cal-new-on-date-btn');
+    if (newOnDateBtn) {
+      newOnDateBtn.addEventListener('click', () => {
+        const facDateIn = document.getElementById('facDateInput');
+        if (facDateIn) facDateIn.value = dateStr;
+      });
+    }
+
+    const jumpBtn = document.getElementById('calJumpLatestBtn');
+    if (jumpBtn) {
+      jumpBtn.addEventListener('click', () => {
+        const dates = Object.keys(data.publishedDatesMap || {}).sort();
+        if (dates.length > 0) {
+          const latest = dates[dates.length - 1];
+          const [y, m] = latest.split('-').map(Number);
+          facultyAnalyticsState.calendarYear = y;
+          facultyAnalyticsState.calendarMonth = m - 1;
+          selectAnalyticsDate(latest);
+        } else {
+          toast('No published lectures found.');
+        }
+      });
+    }
+
+    if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+    return;
+  }
+
+  // 2. RENDER LECTURE DETAILS CARDS WITH SQLITE CONTROLS
+  detailList.innerHTML = matchingLectures.map(lec => {
+    const isPub = lec.published;
+    const statusBadge = isPub
+      ? '<span class="badge badge-published">🚀 PUBLISHED</span>'
+      : (lec.status === 'READY' ? '<span class="badge badge-ready">✅ READY</span>' : '<span class="badge badge-draft">📝 DRAFT</span>');
+
+    const boxTag = lec.storageBoxName ? `📦 ${escapeHtml(lec.storageBoxName)}` : (lec.subject ? escapeHtml(lec.subject) : 'General');
+
+    return `
+      <div class="ana-cal-lecture-card" data-id="${lec.id}">
+        <div class="ana-cal-lecture-head">
+          <div>
+            <h4 class="ana-cal-lecture-title">${escapeHtml(lec.title)}</h4>
+            <div class="ana-cal-lecture-meta" style="margin-top:4px;">
+              <span>${boxTag}</span>
+              <span>&bull;</span>
+              <span>${escapeHtml(lec.classCourse || 'SE Computer Engineering')}</span>
+            </div>
+          </div>
+          <div>${statusBadge}</div>
+        </div>
+
+        <div class="ana-cal-lecture-meta" style="background:#fff;padding:8px 12px;border-radius:7px;border:1px solid var(--border);margin:6px 0;display:flex;flex-wrap:wrap;gap:12px;align-items:center;font-size:12px;color:var(--muted);">
+          <span style="display:inline-flex;align-items:center;gap:4px;"><i data-lucide="clock" style="width:13px;height:13px;"></i> Duration: <b style="color:var(--text);">${escapeHtml(lec.duration || '00:00')}</b></span>
+          <span>&bull;</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><i data-lucide="play" style="width:13px;height:13px;"></i> Plays: <b style="color:var(--text);">${lec.playsCount || 0}</b></span>
+          <span>&bull;</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><i data-lucide="users" style="width:13px;height:13px;"></i> Students: <b style="color:var(--text);">${lec.studentsAccessed || 0}</b></span>
+          <span>&bull;</span>
+          <span style="display:inline-flex;align-items:center;gap:4px;"><i data-lucide="hourglass" style="width:13px;height:13px;"></i> Avg: <b style="color:var(--text);">${escapeHtml(lec.avgListeningTime || '0m 00s')}</b></span>
+        </div>
+
+        <div class="ana-cal-lecture-actions" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;">
+          <button type="button" class="primary act-btn cal-act-review" data-id="${lec.id}" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:5px;">
+            <i data-lucide="eye" style="width:13px;height:13px;"></i> Review &amp; Edit
+          </button>
+          <button type="button" class="outline act-btn cal-act-publish-toggle" data-id="${lec.id}" data-pub="${isPub ? 1 : 0}" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:5px;${isPub ? 'color:var(--warning);border-color:var(--warning-border);' : 'color:var(--success);border-color:var(--success-border);'}">
+            ${isPub ? '<i data-lucide="lock" style="width:13px;height:13px;"></i> Unpublish' : '<i data-lucide="send" style="width:13px;height:13px;"></i> Publish'}
+          </button>
+          <button type="button" class="outline act-btn cal-act-reschedule" data-id="${lec.id}" data-title="${escapeHtml(lec.title)}" data-date="${escapeHtml(lec.lectureDate || '')}" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:5px;">
+            <i data-lucide="calendar" style="width:13px;height:13px;"></i> Change Date
+          </button>
+          <button type="button" class="outline act-btn cal-act-filter-table" data-date="${dateStr}" style="padding:6px 12px;font-size:12px;display:inline-flex;align-items:center;gap:5px;">
+            <i data-lucide="list" style="width:13px;height:13px;"></i> In Table
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  setTimeout(() => { try { lucide.createIcons(); } catch(e){} }, 50);
+
+  // Wire action buttons with real reflection
+  detailList.querySelectorAll('.cal-act-review').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      if (id) openFacultyReview(id, false);
+    });
+  });
+
+  // Direct Publish/Unpublish toggle reflecting in recordings table
+  detailList.querySelectorAll('.cal-act-publish-toggle').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const currentlyPublished = btn.dataset.pub === '1';
+      const targetPublish = !currentlyPublished;
+
+      btn.disabled = true;
+      btn.textContent = 'Updating...';
+
+      try {
+        const res = await fetch(`/api/recordings/${id}/publish`, {
+          method: 'POST',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ publish: targetPublish }),
+        });
+
+        if (handleAuthError(res)) return;
+
+        if (res.ok) {
+          toast(targetPublish ? 'Lecture published successfully!' : 'Lecture unpublished.');
+          await loadFacultyAnalytics(true);
+          loadRecordings();
+        } else {
+          toast('Failed to update publish status.');
+          btn.disabled = false;
+        }
+      } catch (err) {
+        toast('❌ Network error updating lecture.');
+        btn.disabled = false;
+      }
+    });
+  });
+
+  // Direct Change Date modal trigger reflecting in SQLite recordings table
+  detailList.querySelectorAll('.cal-act-reschedule').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const title = btn.dataset.title;
+      const currentD = btn.dataset.date || dateStr;
+
+      const modal = document.getElementById('anaRescheduleModal');
+      const idInput = document.getElementById('anaRescheduleLectureId');
+      const titleEl = document.getElementById('anaRescheduleLectureTitle');
+      const dateInput = document.getElementById('anaRescheduleDateInput');
+
+      if (idInput) idInput.value = id;
+      if (titleEl) titleEl.textContent = `Lecture: "${title}"`;
+      if (dateInput) dateInput.value = currentD;
+
+      if (modal) modal.classList.remove('hidden');
+    });
+  });
+
+  detailList.querySelectorAll('.cal-act-filter-table').forEach(btn => {
+    btn.addEventListener('click', () => {
+      facultyAnalyticsState.tableDateFilter = dateStr;
+      renderAnalyticsLecturesTable();
+      const tableCard = document.getElementById('facultyAnalyticsRows')?.closest('.card');
+      if (tableCard) tableCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+}
+
+// ── 🕒 Recent Student Access Activity Stream ──────────────────────────────────
+function renderRecentActivityStream() {
+  const data = facultyAnalyticsState.data;
+  const rowsEl = document.getElementById('anaRecentActivityRows');
+  if (!rowsEl || !data) return;
+
+  const rawLogs = data.recentActivity || [];
+  const q = facultyAnalyticsState.activityFilter.trim().toLowerCase();
+
+  const filteredLogs = rawLogs.filter(log => {
+    if (!q) return true;
+    const hay = `${log.studentName || ''} ${log.studentEmail || ''} ${log.lectureTitle || ''} ${log.subject || ''} ${log.action || ''}`.toLowerCase();
+    return hay.includes(q);
+  });
+
+  // Empty state if no logs
+  if (filteredLogs.length === 0) {
+    if (q) {
+      rowsEl.innerHTML = `
+        <tr><td colspan="5">
+          <div class="ana-empty-state" style="padding:28px 16px;margin:8px 0;">
+            <div class="ana-empty-icon" style="width:42px;height:42px;"><i data-lucide="search"></i></div>
+            <h4 class="ana-empty-title">No Matching Activity Logs</h4>
+            <p class="ana-empty-desc">No student access events found matching "<b>${escapeHtml(q)}</b>".</p>
+            <button type="button" class="outline" id="anaClearActFilterBtn" style="padding:5px 12px;font-size:12px;">Clear Filter</button>
+          </div>
+        </td></tr>
+      `;
+      const clr = document.getElementById('anaClearActFilterBtn');
+      if (clr) {
+        clr.addEventListener('click', () => {
+          facultyAnalyticsState.activityFilter = '';
+          const inp = document.getElementById('anaActivitySearchInput');
+          if (inp) inp.value = '';
+          renderRecentActivityStream();
+        });
+      }
+    } else {
+      rowsEl.innerHTML = `
+        <tr><td colspan="5">
+          <div class="ana-empty-state" style="padding:28px 16px;margin:8px 0;">
+            <div class="ana-empty-icon" style="width:42px;height:42px;"><i data-lucide="headphones"></i></div>
+            <h4 class="ana-empty-title">No Student Access Activity Yet</h4>
+            <p class="ana-empty-desc">Real-time student study sessions, lecture audio streams, and verified accesses will appear here as students listen.</p>
+          </div>
+        </td></tr>
+      `;
+    }
+    if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+    return;
+  }
+
+  rowsEl.innerHTML = filteredLogs.map(log => {
+    const isStream = log.action === 'STREAM';
+    const actionBadge = isStream
+      ? '<span class="badge badge-published"><i data-lucide="headphones"></i> Streamed Audio</span>'
+      : '<span class="badge badge-processing"><i data-lucide="eye"></i> Opened Lecture</span>';
+
+    return `
+      <tr>
+        <td>
+          <b>${escapeHtml(log.studentName || 'Student')}</b>
+          <small class="muted" style="display:block;font-size:11.5px;">${escapeHtml(log.studentEmail || '')}</small>
+        </td>
+        <td>
+          <b>${escapeHtml(log.lectureTitle || 'Lecture')}</b>
+          <small class="muted" style="display:block;font-size:11.5px;">${escapeHtml(log.subject || 'General')}</small>
+        </td>
+        <td>${actionBadge}</td>
+        <td>
+          <b>${escapeHtml(log.timeAgo || 'Recently')}</b>
+          <small class="muted" style="display:block;font-size:11px;">${formatLocalDisplayDate(log.timestamp)}</small>
+        </td>
+        <td>
+          <span style="display:inline-flex;align-items:center;gap:4px;color:var(--success);font-weight:700;font-size:12px;">
+            <i data-lucide="check-circle" style="width:13px;height:13px;"></i> Verified Student
+          </span>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+}
+
+// ── 📚 Lecture Access & Engagement Breakdown Table ─────────────────────────────
+function renderAnalyticsLecturesTable() {
+  const data = facultyAnalyticsState.data;
+  const rowsEl = document.getElementById('facultyAnalyticsRows');
+  const countLabel = document.getElementById('anaLectureCountLabel');
+  const clearFilterBtn = document.getElementById('anaTableClearFilterBtn');
+
+  if (!rowsEl || !data) return;
+
+  const rawStats = data.lectureStats || [];
+  const dateFilter = facultyAnalyticsState.tableDateFilter;
+
+  const filteredStats = dateFilter
+    ? rawStats.filter(r => r.lectureDate === dateFilter)
+    : rawStats;
+
+  if (clearFilterBtn) {
+    clearFilterBtn.classList.toggle('hidden', !dateFilter);
+  }
+
+  if (countLabel) {
+    if (dateFilter) {
+      countLabel.textContent = `Filtered by date ${dateFilter} (${filteredStats.length} lecture${filteredStats.length === 1 ? '' : 's'})`;
+    } else {
+      countLabel.textContent = `Showing all ${rawStats.length} faculty lectures`;
+    }
+  }
+
+  if (filteredStats.length === 0) {
+    rowsEl.innerHTML = `
+      <tr><td colspan="7">
+        <div class="ana-empty-state" style="padding:32px 16px;margin:8px 0;">
+          <div class="ana-empty-icon" style="width:42px;height:42px;font-size:18px;"><i data-lucide="book-open"></i></div>
+          <h4 class="ana-empty-title">${dateFilter ? 'No Lectures on ' + escapeHtml(dateFilter) : 'No Faculty Lectures Found'}</h4>
+          <p class="ana-empty-desc">${dateFilter ? 'No lectures match this specific date.' : 'Upload your first classroom recording to review automated AI summaries and listener metrics.'}</p>
+          ${dateFilter ? '<button type="button" class="outline" id="anaResetTableFilterBtn">Show All Lectures</button>' : '<button type="button" class="primary" data-page="facultyUpload">+ Create New Lecture</button>'}
+        </div>
+      </td></tr>
+    `;
+    const rst = document.getElementById('anaResetTableFilterBtn');
+    if (rst) {
+      rst.addEventListener('click', () => {
+        facultyAnalyticsState.tableDateFilter = null;
+        renderAnalyticsLecturesTable();
+      });
+    }
+    if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+    return;
+  }
+
+  rowsEl.innerHTML = filteredStats.map(r => {
+    const isPub = r.published;
+    const statusBadge = isPub
+      ? '<span class="badge badge-published"><i data-lucide="check-circle-2"></i> Published</span>'
+      : (r.status === 'READY' ? '<span class="badge badge-ready"><i data-lucide="eye"></i> Ready</span>' : '<span class="badge badge-draft"><i data-lucide="file-edit"></i> Draft</span>');
+
+    const boxTag = r.storageBoxName
+      ? `<span class="box-tag"><i data-lucide="archive"></i> ${escapeHtml(r.storageBoxName)}</span>`
+      : (r.subject ? escapeHtml(r.subject) : 'General');
+    const scopeLabel = r.allowedStudentsCount
+      ? `${r.allowedStudentsCount} Enrolled Students`
+      : 'All Registered Students';
+
+    return `
+      <tr>
+        <td>
+          <b>${escapeHtml(r.title)}</b>
+          <small class="muted" style="display:block;font-size:11.5px;">${escapeHtml(r.lectureDate || '')} &bull; ${escapeHtml(r.duration || '00:00')}</small>
+        </td>
+        <td>${boxTag}</td>
+        <td>${statusBadge}</td>
+        <td><span class="badge" style="background:var(--bg-subtle);color:var(--p);font-weight:600;"><i data-lucide="users" style="width:11px;height:11px;"></i> ${escapeHtml(scopeLabel)}</span></td>
+        <td><b>${r.studentsAccessed || 0}</b> students</td>
+        <td><b>${r.playsCount || 0}</b> plays</td>
+        <td><b>${escapeHtml(r.avgListeningTime || '0m 00s')}</b></td>
+      </tr>
+    `;
+  }).join('');
+
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+}
+
+// ── Attach Analytics Event Listeners (Once) ───────────────────────────────────
+function initFacultyAnalyticsEvents() {
+  if (facultyAnalyticsState.eventsInitialized) return;
+  facultyAnalyticsState.eventsInitialized = true;
+
+  // Refresh & Retry buttons
+  const refreshBtn = document.getElementById('anaRefreshBtn');
+  const retryBtn = document.getElementById('anaRetryBtn');
+  if (refreshBtn) refreshBtn.addEventListener('click', () => loadFacultyAnalytics(true));
+  if (retryBtn) retryBtn.addEventListener('click', () => loadFacultyAnalytics(true));
+
+  // Wellbeing week switcher
+  const prevWeekBtn = document.getElementById('anaChartPrevWeekBtn');
+  const nextWeekBtn = document.getElementById('anaChartNextWeekBtn');
+  const todayWeekBtn = document.getElementById('anaChartTodayWeekBtn');
+
+  if (prevWeekBtn) {
+    prevWeekBtn.addEventListener('click', () => {
+      facultyAnalyticsState.weekOffset--;
+      renderWellbeingSection();
+    });
+  }
+  if (nextWeekBtn) {
+    nextWeekBtn.addEventListener('click', () => {
+      facultyAnalyticsState.weekOffset++;
+      renderWellbeingSection();
+    });
+  }
+  if (todayWeekBtn) {
+    todayWeekBtn.addEventListener('click', () => {
+      facultyAnalyticsState.weekOffset = 0;
+      renderWellbeingSection();
+    });
+  }
+
+  // Calendar month switcher
+  const prevMonthBtn = document.getElementById('calPrevMonthBtn');
+  const nextMonthBtn = document.getElementById('calNextMonthBtn');
+  const todayBtn = document.getElementById('calTodayBtn');
+  const clearFilterBtn = document.getElementById('calClearFilterBtn');
+  const tableClearFilterBtn = document.getElementById('anaTableClearFilterBtn');
+
+  if (prevMonthBtn) {
+    prevMonthBtn.addEventListener('click', () => {
+      if (facultyAnalyticsState.calendarMonth === 0) {
+        facultyAnalyticsState.calendarMonth = 11;
+        facultyAnalyticsState.calendarYear--;
+      } else {
+        facultyAnalyticsState.calendarMonth--;
+      }
+      renderInteractiveCalendar();
+    });
+  }
+  if (nextMonthBtn) {
+    nextMonthBtn.addEventListener('click', () => {
+      if (facultyAnalyticsState.calendarMonth === 11) {
+        facultyAnalyticsState.calendarMonth = 0;
+        facultyAnalyticsState.calendarYear++;
+      } else {
+        facultyAnalyticsState.calendarMonth++;
+      }
+      renderInteractiveCalendar();
+    });
+  }
+  if (todayBtn) {
+    todayBtn.addEventListener('click', () => {
+      const now = new Date();
+      facultyAnalyticsState.calendarYear = now.getFullYear();
+      facultyAnalyticsState.calendarMonth = now.getMonth();
+      const tStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      selectAnalyticsDate(tStr);
+    });
+  }
+  if (clearFilterBtn) {
+    clearFilterBtn.addEventListener('click', () => {
+      facultyAnalyticsState.selectedDate = null;
+      renderInteractiveCalendar();
+      renderSelectedDateDetails();
+      renderWellbeingSection();
+    });
+  }
+  if (tableClearFilterBtn) {
+    tableClearFilterBtn.addEventListener('click', () => {
+      facultyAnalyticsState.tableDateFilter = null;
+      renderAnalyticsLecturesTable();
+    });
+  }
+
+  // Live activity search filter
+  const actSearch = document.getElementById('anaActivitySearchInput');
+  if (actSearch) {
+    actSearch.addEventListener('input', (e) => {
+      facultyAnalyticsState.activityFilter = e.target.value || '';
+      renderRecentActivityStream();
+    });
+  }
+
+  // Goals configuration modal (reflects in SQLite faculty_analytics_goals table)
+  const goalsModal = document.getElementById('anaGoalsModal');
+  const openGoalsBtn = document.getElementById('anaOpenGoalsModalBtn');
+  const closeGoalsBtn = document.getElementById('anaCloseGoalsModalBtn');
+  const cancelGoalsBtn = document.getElementById('anaCancelGoalsModalBtn');
+  const goalsForm = document.getElementById('anaGoalsForm');
+  const inWeekly = document.getElementById('anaInputWeeklyGoal');
+  const inMonthly = document.getElementById('anaInputMonthlyGoal');
+
+  if (openGoalsBtn && goalsModal) {
+    openGoalsBtn.addEventListener('click', () => {
+      if (inWeekly) inWeekly.value = facultyAnalyticsState.data?.weeklyTarget || 3;
+      if (inMonthly) inMonthly.value = facultyAnalyticsState.data?.monthlyTarget || 6;
+      goalsModal.classList.remove('hidden');
+    });
+  }
+  if (closeGoalsBtn && goalsModal) {
+    closeGoalsBtn.addEventListener('click', () => goalsModal.classList.add('hidden'));
+  }
+  if (cancelGoalsBtn && goalsModal) {
+    cancelGoalsBtn.addEventListener('click', () => goalsModal.classList.add('hidden'));
+  }
+  if (goalsForm && goalsModal) {
+    goalsForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const weeklyTarget = Number(inWeekly?.value) || 3;
+      const monthlyTarget = Number(inMonthly?.value) || 6;
+      const submitBtn = document.getElementById('anaSaveGoalsBtn');
+      if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Saving to SQLite...'; }
+
+      try {
+        const res = await fetch('/api/faculty/analytics/goals', {
+          method: 'POST',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ weeklyTarget, monthlyTarget }),
+        });
+
+        if (handleAuthError(res)) return;
+
+        if (res.ok) {
+          const json = await res.json();
+          if (facultyAnalyticsState.data) {
+            facultyAnalyticsState.data.weeklyTarget = json.weeklyTarget;
+            facultyAnalyticsState.data.monthlyTarget = json.monthlyTarget;
+          }
+          goalsModal.classList.add('hidden');
+          renderWellbeingSection();
+          toast('✅ Publishing goals saved to SQLite database!');
+        } else {
+          toast('❌ Failed to save goals to SQLite.');
+        }
+      } catch (err) {
+        toast('❌ Network error saving goals.');
+      } finally {
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '💾 Save to SQLite'; }
+      }
+    });
+  }
+
+  // Reschedule date modal (reflects in SQLite recordings.lecture_date)
+  const reschedModal = document.getElementById('anaRescheduleModal');
+  const closeReschedBtn = document.getElementById('anaCloseRescheduleModalBtn');
+  const cancelReschedBtn = document.getElementById('anaCancelRescheduleBtn');
+  const reschedForm = document.getElementById('anaRescheduleForm');
+
+  if (closeReschedBtn && reschedModal) {
+    closeReschedBtn.addEventListener('click', () => reschedModal.classList.add('hidden'));
+  }
+  if (cancelReschedBtn && reschedModal) {
+    cancelReschedBtn.addEventListener('click', () => reschedModal.classList.add('hidden'));
+  }
+  if (reschedForm && reschedModal) {
+    reschedForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const id = document.getElementById('anaRescheduleLectureId')?.value;
+      const lectureDate = document.getElementById('anaRescheduleDateInput')?.value;
+      if (!id || !lectureDate) return;
+
+      try {
+        const res = await fetch(`/api/recordings/${id}/lecture-date`, {
+          method: 'POST',
+          headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lectureDate }),
+        });
+
+        if (handleAuthError(res)) return;
+
+        if (res.ok) {
+          reschedModal.classList.add('hidden');
+          toast('✅ Lecture date updated in SQLite database!');
+          facultyAnalyticsState.selectedDate = lectureDate;
+          await loadFacultyAnalytics(true);
+          loadRecordings();
+        } else {
+          toast('❌ Failed to update lecture date in SQLite.');
+        }
+      } catch (err) {
+        toast('❌ Network error rescheduling lecture.');
+      }
+    });
   }
 }
 
@@ -1110,11 +2260,19 @@ const facRetryUploadBtn = document.getElementById('facRetryUploadBtn');
 // Faculty Live Recorder DOM & State
 const facMicBtn = document.getElementById('facMicBtn');
 const facStartRecBtn = document.getElementById('facStartRecBtn');
+const facPauseRecBtn = document.getElementById('facPauseRecBtn');
 const facStopRecBtn = document.getElementById('facStopRecBtn');
 const facResetRecBtn = document.getElementById('facResetRecBtn');
 const facTimerEl = document.getElementById('facTimer');
 const facRecordMsg = document.getElementById('facRecordMsg');
 const facRecordStatus = document.getElementById('facRecordStatus');
+
+const facWaveformCanvas = document.getElementById('facWaveformCanvas');
+const facWaveformContainer = document.getElementById('facWaveformContainer');
+const waveformStatusBadge = document.getElementById('waveformStatusBadge');
+const waveformStatusText = document.getElementById('waveformStatusText');
+const waveformDecibelText = document.getElementById('waveformDecibelText');
+const recPulseDot = document.getElementById('recPulseDot');
 
 let facSelectedFile = null;
 let facUploadedDuration = '00:00';
@@ -1127,7 +2285,14 @@ let facRecTimerInterval = null;
 let facRecSeconds = 0;
 let facRecSpeechRecognition = null;
 let facIsRecording = false;
+let facIsPaused = false;
 let lastAttemptedStatus = 'READY';
+
+// Audio Context & Analyser for live responsive waveform
+let facAudioCtx = null;
+let facAnalyser = null;
+let facAudioSource = null;
+let facWaveformAnimId = null;
 
 // Switch between Upload Audio File tab and Record Lecture Live tab
 if (facUploadTab && facRecordTab && facUploadPane && facRecordPane) {
@@ -1203,9 +2368,270 @@ function formatShortDuration(sec) {
   return `${m}:${s}`;
 }
 
+// ── Live Responsive Waveform Engine ──────────────────────────────────────
+function drawIdleWaveform() {
+  if (facIsRecording && !facIsPaused) return;
+  const canvas = document.getElementById('facWaveformCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const width = canvas.clientWidth || 540;
+  const height = canvas.clientHeight || 72;
+
+  if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+  }
+
+  ctx.save();
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, width, height);
+
+  // Subtle center line
+  const centerY = height / 2;
+  ctx.strokeStyle = 'rgba(232, 227, 218, 0.45)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(0, centerY);
+  ctx.lineTo(width, centerY);
+  ctx.stroke();
+
+  // Subtle harmonic baseline wave
+  const time = Date.now() * 0.0022;
+  ctx.beginPath();
+  ctx.lineWidth = 1.6;
+  ctx.strokeStyle = facIsPaused ? '#d97706' : 'rgba(88, 28, 56, 0.35)';
+
+  for (let x = 0; x <= width; x += 3) {
+    const normX = x / width;
+    const envelope = Math.sin(normX * Math.PI);
+    const y = centerY + Math.sin(normX * 12 + time) * 6 * envelope + Math.sin(normX * 6 - time * 0.7) * 4 * envelope;
+    if (x === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+
+  if (facIsPaused) {
+    ctx.fillStyle = '#b45309';
+    ctx.font = '600 11px system-ui, -apple-system, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('RECORDING PAUSED', width / 2, centerY - 14);
+  }
+  ctx.restore();
+
+  if (!facIsRecording || facIsPaused) {
+    facWaveformAnimId = requestAnimationFrame(drawIdleWaveform);
+  }
+}
+
+function startWaveformVisualization(stream) {
+  cancelAnimationFrame(facWaveformAnimId);
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    if (!facAudioCtx || facAudioCtx.state === 'closed') {
+      facAudioCtx = new AudioContextClass();
+    } else if (facAudioCtx.state === 'suspended') {
+      facAudioCtx.resume();
+    }
+
+    facAudioSource = facAudioCtx.createMediaStreamSource(stream);
+    facAnalyser = facAudioCtx.createAnalyser();
+    facAnalyser.fftSize = 256;
+    facAnalyser.smoothingTimeConstant = 0.78;
+    facAudioSource.connect(facAnalyser);
+
+    const canvas = document.getElementById('facWaveformCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const bufferLength = facAnalyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const container = document.getElementById('facWaveformContainer');
+    if (container) {
+      container.style.display = 'block';
+    }
+
+    function renderFrame() {
+      if (!facIsRecording) return;
+      if (facIsPaused) {
+        facWaveformAnimId = requestAnimationFrame(renderFrame);
+        return;
+      }
+
+      facWaveformAnimId = requestAnimationFrame(renderFrame);
+      facAnalyser.getByteFrequencyData(dataArray);
+
+      const dpr = window.devicePixelRatio || 1;
+      const width = canvas.clientWidth || 540;
+      const height = canvas.clientHeight || 72;
+
+      if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+      }
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, width, height);
+
+      const centerY = height / 2;
+      ctx.strokeStyle = 'rgba(232, 227, 218, 0.45)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, centerY);
+      ctx.lineTo(width, centerY);
+      ctx.stroke();
+
+      const barCount = 48;
+      const barSpacing = 3;
+      const totalSpacing = barSpacing * (barCount - 1);
+      const barWidth = Math.max(2, (width - 24 - totalSpacing) / barCount);
+      const startX = (width - (barCount * barWidth + totalSpacing)) / 2;
+
+      let sum = 0;
+      const step = Math.floor(bufferLength / barCount) || 1;
+
+      const grad = ctx.createLinearGradient(0, 0, 0, height);
+      grad.addColorStop(0, '#be123c');
+      grad.addColorStop(0.3, '#9f1239');
+      grad.addColorStop(0.5, '#581c38');
+      grad.addColorStop(0.7, '#9f1239');
+      grad.addColorStop(1, '#be123c');
+
+      ctx.fillStyle = grad;
+
+      for (let i = 0; i < barCount; i++) {
+        const val = dataArray[i * step] || 0;
+        sum += val;
+        const percent = val / 255;
+        const barHeight = Math.max(4, percent * (height - 14));
+        const x = startX + i * (barWidth + barSpacing);
+        const y = centerY - barHeight / 2;
+        const r = Math.min(barWidth / 2, 2.5);
+
+        ctx.beginPath();
+        if (typeof ctx.roundRect === 'function') {
+          ctx.roundRect(x, y, barWidth, barHeight, r);
+        } else {
+          ctx.rect(x, y, barWidth, barHeight);
+        }
+        ctx.fill();
+      }
+
+      ctx.restore();
+    }
+
+    renderFrame();
+  } catch (e) {
+    console.error('Audio visualization initialization error:', e);
+  }
+}
+
+function stopWaveformVisualization() {
+  cancelAnimationFrame(facWaveformAnimId);
+  if (facAudioSource) {
+    try { facAudioSource.disconnect(); } catch (e) {}
+    facAudioSource = null;
+  }
+  if (facAnalyser) {
+    try { facAnalyser.disconnect(); } catch (e) {}
+    facAnalyser = null;
+  }
+  if (facAudioCtx && facAudioCtx.state !== 'closed') {
+    try { facAudioCtx.close(); } catch (e) {}
+    facAudioCtx = null;
+  }
+
+  const container = document.getElementById('facWaveformContainer');
+  if (container) container.style.display = 'none';
+}
+
+function toggleFacultyPauseRecording() {
+  if (!facIsRecording || !facMediaRecorder) return;
+  const pauseBtn = document.getElementById('facPauseRecBtn');
+  const statusBadge = document.getElementById('waveformStatusBadge');
+  const statusText = document.getElementById('waveformStatusText');
+  const pulseDot = document.getElementById('recPulseDot');
+  const container = document.getElementById('facWaveformContainer');
+  const decibelText = document.getElementById('waveformDecibelText');
+
+  if (!facIsPaused) {
+    facIsPaused = true;
+    try { facMediaRecorder.pause(); } catch (e) {}
+    if (facRecSpeechRecognition) {
+      try { facRecSpeechRecognition.stop(); } catch (e) {}
+    }
+    clearInterval(facRecTimerInterval);
+
+    if (facRecordMsg) facRecordMsg.textContent = 'Recording Paused';
+    if (facRecordStatus) facRecordStatus.textContent = 'Recording is paused. Click "Resume" to continue capturing audio.';
+    if (pauseBtn) {
+      pauseBtn.innerHTML = '<i data-lucide="play"></i> Resume';
+      pauseBtn.classList.remove('outline');
+      pauseBtn.classList.add('primary');
+    }
+    if (container) {
+      container.classList.remove('recording');
+      container.classList.add('paused');
+    }
+    if (statusBadge) {
+      statusBadge.classList.remove('live');
+      statusBadge.classList.add('paused');
+    }
+    if (statusText) statusText.textContent = 'Recording Paused';
+    if (pulseDot) pulseDot.className = 'rec-pulse-dot paused';
+    if (decibelText) decibelText.textContent = 'Paused';
+    if (facMicBtn) facMicBtn.classList.remove('recording');
+    drawIdleWaveform();
+    toast('Recording paused.');
+  } else {
+    facIsPaused = false;
+    try { facMediaRecorder.resume(); } catch (e) {}
+    if (facRecSpeechRecognition) {
+      try { facRecSpeechRecognition.start(); } catch (e) {}
+    }
+    facRecTimerInterval = setInterval(() => {
+      facRecSeconds++;
+      if (facTimerEl) facTimerEl.textContent = formatTimerClock(facRecSeconds);
+    }, 1000);
+
+    if (facRecordMsg) facRecordMsg.textContent = 'Recording Live Classroom Audio...';
+    if (facRecordStatus) facRecordStatus.textContent = 'Speak clearly into your microphone. Click "Stop Recording" when finished.';
+    if (pauseBtn) {
+      pauseBtn.innerHTML = '<i data-lucide="pause"></i> Pause';
+      pauseBtn.classList.remove('primary');
+      pauseBtn.classList.add('outline');
+    }
+    if (container) {
+      container.classList.add('recording');
+      container.classList.remove('paused');
+    }
+    if (statusBadge) {
+      statusBadge.classList.add('live');
+      statusBadge.classList.remove('paused');
+    }
+    if (statusText) statusText.textContent = 'Live Audio Recording';
+    if (pulseDot) pulseDot.className = 'rec-pulse-dot recording';
+    if (facMicBtn) facMicBtn.classList.add('recording');
+    toast('Recording resumed.');
+  }
+
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
+}
+
+function pauseBtnReset() {
+  const pauseBtn = document.getElementById('facPauseRecBtn');
+  if (pauseBtn) {
+    pauseBtn.innerHTML = '<i data-lucide="pause"></i> Pause';
+    pauseBtn.className = 'outline disabled';
+    pauseBtn.disabled = true;
+  }
+}
+
 async function startFacultyLiveRecording() {
   if (!isFacultyRole()) {
-    toast('❌ ACCESS DENIED: Only Faculty can record lectures.');
+    toast('Access denied. Faculty role required.');
     return;
   }
   if (facIsRecording) return;
@@ -1218,6 +2644,7 @@ async function startFacultyLiveRecording() {
     facRecSeconds = 0;
     facLiveSpeechTranscript = '';
     facIsRecording = true;
+    facIsPaused = false;
 
     let options = {};
     if (typeof MediaRecorder !== 'undefined') {
@@ -1278,21 +2705,29 @@ async function startFacultyLiveRecording() {
     }, 1000);
 
     if (facMicBtn) facMicBtn.classList.add('recording');
-    if (facRecordMsg) facRecordMsg.textContent = '🔴 Recording Live Classroom Audio...';
-    if (facRecordStatus) facRecordStatus.textContent = 'Speak clearly into your microphone. Click "⏹️ Stop Recording" when finished.';
+    if (facRecordMsg) facRecordMsg.textContent = 'Recording Live Classroom Audio...';
+    if (facRecordStatus) facRecordStatus.textContent = 'Speak clearly into your microphone. Click "Stop Recording" when finished.';
     if (facStartRecBtn) {
       facStartRecBtn.disabled = true;
       facStartRecBtn.classList.add('disabled');
+    }
+    if (facPauseRecBtn) {
+      facPauseRecBtn.disabled = false;
+      facPauseRecBtn.classList.remove('disabled');
+      facPauseRecBtn.innerHTML = '<i data-lucide="pause"></i> Pause';
     }
     if (facStopRecBtn) {
       facStopRecBtn.disabled = false;
       facStopRecBtn.classList.remove('disabled');
     }
-    toast('🎙️ Live lecture recording started.');
+
+    startWaveformVisualization(stream);
+    toast('Live lecture recording started.');
+    if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
   } catch (err) {
-    toast('❌ Microphone access denied or unavailable. Please check permissions or upload an audio file.');
+    toast('Microphone access denied or unavailable. Please check permissions.');
     if (facRecordStatus) {
-      facRecordStatus.textContent = '❌ Microphone permission denied. Please allow microphone access or use "📤 Upload Audio File".';
+      facRecordStatus.textContent = 'Microphone permission denied. Please allow microphone access or select a pre-recorded file.';
     }
   }
 }
@@ -1300,6 +2735,7 @@ async function startFacultyLiveRecording() {
 function stopFacultyLiveRecording() {
   if (!facIsRecording) return;
   facIsRecording = false;
+  facIsPaused = false;
   clearInterval(facRecTimerInterval);
 
   if (facRecSpeechRecognition) {
@@ -1314,18 +2750,26 @@ function stopFacultyLiveRecording() {
     facMediaStream = null;
   }
 
+  stopWaveformVisualization();
+
   if (facMicBtn) facMicBtn.classList.remove('recording');
-  if (facRecordMsg) facRecordMsg.textContent = '✅ Recording Captured — Ready to Save';
-  if (facRecordStatus) facRecordStatus.textContent = 'Click "💾 Save Recording & Process AI" below to generate transcript & summary.';
+  if (facRecordMsg) facRecordMsg.textContent = 'Recording Captured — Ready to Save';
+  if (facRecordStatus) facRecordStatus.textContent = 'Click "Save Recording & Process AI" below to generate transcript & summary.';
   if (facStartRecBtn) {
     facStartRecBtn.disabled = false;
     facStartRecBtn.classList.remove('disabled');
+  }
+  if (facPauseRecBtn) {
+    facPauseRecBtn.disabled = true;
+    facPauseRecBtn.classList.add('disabled');
+    pauseBtnReset();
   }
   if (facStopRecBtn) {
     facStopRecBtn.disabled = true;
     facStopRecBtn.classList.add('disabled');
   }
-  toast('⏹️ Recording stopped. Ready to save and process!');
+  toast('Recording captured. Ready to save and process.');
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
 }
 
 function resetFacultyLiveRecording() {
@@ -1336,13 +2780,22 @@ function resetFacultyLiveRecording() {
   facRecSeconds = 0;
   facRecChunks = [];
   facLiveSpeechTranscript = '';
+  facIsPaused = false;
+
+  stopWaveformVisualization();
+
   if (facTimerEl) facTimerEl.textContent = '00:00:00';
   if (facMicBtn) facMicBtn.classList.remove('recording');
-  if (facRecordMsg) facRecordMsg.textContent = '🎙️ Start Recording Lecture';
-  if (facRecordStatus) facRecordStatus.textContent = 'Click microphone or "🎙️ Start Recording" to record live classroom audio';
+  if (facRecordMsg) facRecordMsg.textContent = 'Start Recording Lecture';
+  if (facRecordStatus) facRecordStatus.textContent = 'Click microphone or "Start Recording" to record live classroom audio';
   if (facStartRecBtn) {
     facStartRecBtn.disabled = false;
     facStartRecBtn.classList.remove('disabled');
+  }
+  if (facPauseRecBtn) {
+    facPauseRecBtn.disabled = true;
+    facPauseRecBtn.classList.add('disabled');
+    pauseBtnReset();
   }
   if (facStopRecBtn) {
     facStopRecBtn.disabled = true;
@@ -1350,6 +2803,7 @@ function resetFacultyLiveRecording() {
   }
   clearFacSelectedFile();
   toast('Recorder reset.');
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
 }
 
 if (facMicBtn) {
@@ -1361,12 +2815,18 @@ if (facMicBtn) {
 if (facStartRecBtn) {
   facStartRecBtn.onclick = () => startFacultyLiveRecording();
 }
+if (facPauseRecBtn) {
+  facPauseRecBtn.onclick = () => toggleFacultyPauseRecording();
+}
 if (facStopRecBtn) {
   facStopRecBtn.onclick = () => stopFacultyLiveRecording();
 }
 if (facResetRecBtn) {
   facResetRecBtn.onclick = () => resetFacultyLiveRecording();
 }
+
+// Draw idle waveform baseline on load
+setTimeout(drawIdleWaveform, 150);
 
 function validateAudioFile(file) {
   if (!file) return { valid: false, error: 'Please select or record an audio file first.' };
@@ -1504,7 +2964,11 @@ async function submitFacultyLecture(initialStatus = 'READY') {
   const title = (document.getElementById('facTitleInput')?.value || '').trim();
   const storageBoxId = (document.getElementById('facStorageBoxSelect')?.value || '').trim();
   let subject = (document.getElementById('facSubjectInput')?.value || '').trim();
-  const classCourse = (document.getElementById('facCourseInput')?.value || 'SE Computer Engineering').trim();
+  const branch = (document.getElementById('facBranchInput')?.value || 'Computer Engineering').trim();
+  const year = (document.getElementById('facYearInput')?.value || 'Second Year (SE)').trim();
+  const sem = (document.getElementById('facSemInput')?.value || 'Semester 3').trim();
+  const div = (document.getElementById('facDivInput')?.value || 'Division A').trim();
+  const classCourse = `${branch} • ${year} • ${sem} • ${div}`;
   const lectureDate = (document.getElementById('facDateInput')?.value || new Date().toISOString().slice(0, 10)).trim();
   const description = (document.getElementById('facDescInput')?.value || '').trim();
   const professorName = localStorage.getItem('vaani_user_name') || 'Dr. Ananya Sharma';
@@ -2303,19 +3767,19 @@ function renderStorageBoxesGrid() {
     const descText = box.description ? escapeHtml(box.description) : '<em style="color:var(--muted)">No description provided</em>';
 
     const facultyBtns = isFaculty ? `
-      <button type="button" class="outline act-btn edit-box-btn" data-box-id="${box.id}" title="Rename / Edit Description">✏ Edit</button>
-      <button type="button" class="outline act-btn add-rec-to-box-btn" data-box-id="${box.id}" title="Add Recording to this Box">📤 Add Recording</button>
-      <button type="button" class="outline act-btn delete-box-btn" data-box-id="${box.id}" style="color:#d32f2f;border-color:#ffcdd2;" title="Delete Storage Box">🗑 Delete</button>
+      <button type="button" class="outline act-btn edit-box-btn" data-box-id="${box.id}" title="Rename / Edit Description"><i data-lucide="edit-3"></i> Edit</button>
+      <button type="button" class="outline act-btn add-rec-to-box-btn" data-box-id="${box.id}" title="Add Recording to this Box"><i data-lucide="plus"></i> Add Lecture</button>
+      <button type="button" class="outline act-btn delete-box-btn" data-box-id="${box.id}" style="color:var(--danger);border-color:var(--danger-border);" title="Delete Storage Box"><i data-lucide="trash-2"></i> Delete</button>
     ` : '';
 
     return `
       <div class="box-card" data-box-id="${box.id}">
         <div class="box-card-top">
           <div class="box-icon-title">
-            <span class="box-emoji">📦</span>
+            <div class="box-icon-wrap"><i data-lucide="archive"></i></div>
             <div style="min-width:0;">
               <h3 class="box-card-name" title="${escapeHtml(box.name)}">${escapeHtml(box.name)}</h3>
-              <span class="badge" style="background:#f0eaff;color:var(--p);font-size:11.5px;font-weight:700;">${countText}</span>
+              <span class="badge" style="background:var(--pale);color:var(--p);font-size:11.5px;font-weight:700;"><i data-lucide="layers" style="width:11px;height:11px;"></i> ${countText}</span>
             </div>
           </div>
         </div>
@@ -2324,18 +3788,20 @@ function renderStorageBoxesGrid() {
 
         <div class="box-card-meta">
           <div class="box-card-meta-row">
-            <span>👨‍🏫 <b>${escapeHtml(creatorText)}</b></span>
-            <span>📅 <b>${escapeHtml(updatedText)}</b></span>
+            <span><i data-lucide="user" style="width:13px;height:13px;color:var(--muted);vertical-align:-2px;"></i> <b>${escapeHtml(creatorText)}</b></span>
+            <span><i data-lucide="calendar" style="width:13px;height:13px;color:var(--muted);vertical-align:-2px;"></i> <b>${escapeHtml(updatedText)}</b></span>
           </div>
         </div>
 
         <div class="box-card-actions">
-          <button type="button" class="primary act-btn open-box-btn" data-box-id="${box.id}" style="padding:7px 14px;font-weight:700;">📂 Open Box</button>
+          <button type="button" class="primary act-btn open-box-btn" data-box-id="${box.id}" style="padding:7px 14px;font-weight:700;"><i data-lucide="folder-open"></i> Open Box</button>
           ${facultyBtns}
         </div>
       </div>
     `;
   }).join('');
+
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
 }
 
 async function openStorageBoxDetail(boxId) {
@@ -2380,7 +3846,7 @@ async function openStorageBoxDetail(boxId) {
   if (crumbName) crumbName.textContent = boxData.name;
   if (countEl) {
     const count = getBoxCountForRole(boxData, isFaculty) || boxRecordings.length;
-    countEl.textContent = `${count} Recording${count === 1 ? '' : 's'}`;
+    countEl.innerHTML = `<i data-lucide="archive"></i> ${count} Recording${count === 1 ? '' : 's'}`;
   }
   if (descEl) descEl.textContent = boxData.description || 'No description provided for this storage box.';
   if (creatorEl) creatorEl.textContent = boxData.createdBy || 'Faculty';
@@ -2429,29 +3895,29 @@ function renderBoxRecordings(list) {
   tbody.innerHTML = filtered.map(r => {
     const audioSrc = r.audioDataUrl ? r.audioDataUrl : `${API_BASE}/${r.id}/audio`;
     const audioPlayerHtml = r.hasAudio
-      ? `<audio controls src="${audioSrc}" style="width:170px;height:30px;vertical-align:middle;"></audio>`
+      ? `<audio controls src="${audioSrc}" style="width:170px;height:30px;vertical-align:middle;border-radius:6px;"></audio>`
       : '<small class="muted">No Audio</small>';
     const displayDate = formatLocalDisplayDate(r.createdAtIso || r.createdAt);
 
-    let statusBadge = '<span class="badge badge-published">🚀 PUBLISHED</span>';
-    if (r.facultyStatus === 'DRAFT') statusBadge = '<span class="badge badge-draft">📝 DRAFT</span>';
-    else if (r.facultyStatus === 'READY') statusBadge = '<span class="badge badge-ready">👁️ READY</span>';
-    else if (r.facultyStatus === 'PROCESSING') statusBadge = '<span class="badge badge-processing">⏳ PROCESSING</span>';
+    let statusBadge = '<span class="badge badge-published"><i data-lucide="check-circle-2"></i> Published</span>';
+    if (r.facultyStatus === 'DRAFT') statusBadge = '<span class="badge badge-draft"><i data-lucide="file-edit"></i> Draft</span>';
+    else if (r.facultyStatus === 'READY') statusBadge = '<span class="badge badge-ready"><i data-lucide="eye"></i> Ready</span>';
+    else if (r.facultyStatus === 'PROCESSING') statusBadge = '<span class="badge badge-processing"><i data-lucide="loader-2"></i> Processing</span>';
 
     let actionButtons = '';
     if (isFaculty) {
       actionButtons = `
-        <button type="button" class="primary act-btn fac-review-btn" data-id="${r.id}" title="Review AI transcript and summary">👁 Review</button>
-        <button type="button" class="outline act-btn fac-review-btn" data-id="${r.id}" data-edit="1" title="Edit lecture content">✏ Edit</button>
+        <button type="button" class="primary act-btn fac-review-btn" data-id="${r.id}" title="Review AI transcript and summary"><i data-lucide="eye"></i> Review</button>
+        <button type="button" class="outline act-btn fac-review-btn" data-id="${r.id}" data-edit="1" title="Edit lecture content"><i data-lucide="edit-3"></i> Edit</button>
         <button type="button" class="outline act-btn fac-pub-toggle" data-id="${r.id}" data-publish="${r.published ? '0' : '1'}">
-          ${r.published ? '🔒 Unpublish' : '🚀 Publish'}
+          ${r.published ? '<i data-lucide="lock"></i> Unpublish' : '<i data-lucide="send"></i> Publish'}
         </button>
-        <button type="button" class="outline act-btn delete-rec" data-id="${r.id}" style="color:#d32f2f;border-color:#ffcdd2;" title="Delete lecture">🗑</button>
+        <button type="button" class="outline act-btn delete-rec" data-id="${r.id}" style="color:var(--danger);border-color:var(--danger-border);" title="Delete lecture"><i data-lucide="trash-2"></i></button>
       `;
     } else {
       actionButtons = `
-        <button type="button" class="primary act-btn view" data-id="${r.id}">▶ Listen &amp; Read Transcript</button>
-        <button type="button" class="outline act-btn" onclick="openDetail('${r.id}'); setTimeout(()=>document.querySelector('[data-detail=summary]')?.click(), 50);">📄 Summary</button>
+        <button type="button" class="primary act-btn view" data-id="${r.id}"><i data-lucide="headphones"></i> Listen &amp; Read</button>
+        <button type="button" class="outline act-btn" onclick="openDetail('${r.id}'); setTimeout(()=>document.querySelector('[data-detail=summary]')?.click(), 50);"><i data-lucide="sparkles"></i> Summary</button>
       `;
     }
 
@@ -2466,12 +3932,14 @@ function renderBoxRecordings(list) {
       </tr>
     `;
   }).join('');
+
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
 }
 
 // ── Storage Box Modal Functions ──────────────────────────────────────────────
 function openCreateBoxModal(presetName = '', presetDesc = '') {
   if (!isFacultyRole()) {
-    toast('❌ ACCESS DENIED: Only Faculty can create storage boxes.');
+    toast('Access denied. Only Faculty can create storage boxes.');
     return;
   }
   const modal = document.getElementById('boxModal');
@@ -2481,19 +3949,20 @@ function openCreateBoxModal(presetName = '', presetDesc = '') {
   const descIn = document.getElementById('boxModalDesc');
   const subBtn = document.getElementById('boxModalSubmitBtn');
 
-  if (titleEl) titleEl.textContent = '📦 Create Storage Box';
+  if (titleEl) titleEl.innerHTML = '<i data-lucide="archive"></i> Create Storage Box';
   if (idIn) idIn.value = '';
   if (nameIn) nameIn.value = presetName;
   if (descIn) descIn.value = presetDesc;
-  if (subBtn) subBtn.textContent = '📦 Create Box';
+  if (subBtn) subBtn.innerHTML = '<i data-lucide="plus"></i> Create Box';
 
   if (modal) modal.classList.remove('hidden');
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
   setTimeout(() => nameIn?.focus(), 50);
 }
 
 function openEditBoxModal(boxId) {
   if (!isFacultyRole()) {
-    toast('❌ ACCESS DENIED: Only Faculty can edit storage boxes.');
+    toast('Access denied. Only Faculty can edit storage boxes.');
     return;
   }
   const box = storageBoxes.find(b => Number(b.id) === Number(boxId));
@@ -2506,13 +3975,14 @@ function openEditBoxModal(boxId) {
   const descIn = document.getElementById('boxModalDesc');
   const subBtn = document.getElementById('boxModalSubmitBtn');
 
-  if (titleEl) titleEl.textContent = '✏ Edit Storage Box';
+  if (titleEl) titleEl.innerHTML = '<i data-lucide="edit-3"></i> Edit Storage Box';
   if (idIn) idIn.value = String(box.id);
   if (nameIn) nameIn.value = box.name || '';
   if (descIn) descIn.value = box.description || '';
-  if (subBtn) subBtn.textContent = '💾 Save Changes';
+  if (subBtn) subBtn.innerHTML = '<i data-lucide="check"></i> Save Changes';
 
   if (modal) modal.classList.remove('hidden');
+  if (window.lucide && typeof lucide.createIcons === 'function') lucide.createIcons();
   setTimeout(() => nameIn?.focus(), 50);
 }
 
